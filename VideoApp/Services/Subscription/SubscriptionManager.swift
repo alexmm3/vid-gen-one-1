@@ -1,0 +1,350 @@
+//
+//  SubscriptionManager.swift
+//  AIVideo
+//
+//  Singleton managing StoreKit 2 subscription operations
+//  Adapted from templates-reference
+//
+
+import Foundation
+import StoreKit
+
+// MARK: - SubscriptionManagerDelegate
+
+@MainActor
+protocol SubscriptionManagerDelegate: AnyObject {
+    func contentWasLoaded(with products: [Product])
+    func purchasedSuccessfully(with productId: String, transactionId: UInt64)
+    func restoredSuccessfully(with productId: String)
+    func errorOccurred(error: Error)
+}
+
+extension SubscriptionManagerDelegate {
+    func contentWasLoaded(with products: [Product]) {}
+    func purchasedSuccessfully(with productId: String, transactionId: UInt64) {}
+    func restoredSuccessfully(with productId: String) {}
+    func errorOccurred(error: Error) {}
+}
+
+// MARK: - SubscriptionManager
+
+@MainActor
+final class SubscriptionManager: ObservableObject {
+    // MARK: - Constants
+    private enum Constant {
+        static let productIds: [String] = BrandConfig.allProductIds
+        static let processedTransactionKey = "processedTransactionId"
+        static let subscriptionProductIdKey = "subscriptionProductId"
+        static let lastTransactionIdKey = "lastOriginalTransactionId"
+    }
+    
+    // MARK: - Singleton
+    static let shared = SubscriptionManager()
+    
+    // MARK: - Properties
+    weak var delegate: SubscriptionManagerDelegate?
+    
+    @Published private(set) var products: [Product] = []
+    @Published private(set) var isLoading = false
+    @Published private(set) var hasActiveSubscription = false
+    
+    private var transactionUpdatesTask: Task<Void, Never>?
+    private var lastProcessedTransactionId: UInt64?
+    
+    /// Last known transaction ID for backend validation (stored in UserDefaults)
+    private(set) var lastTransactionId: String? {
+        get {
+            UserDefaults.standard.string(forKey: Constant.lastTransactionIdKey)
+        }
+        set {
+            if let id = newValue {
+                UserDefaults.standard.set(id, forKey: Constant.lastTransactionIdKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Constant.lastTransactionIdKey)
+            }
+        }
+    }
+    
+    /// Current subscription product ID (stored in UserDefaults)
+    var currentProductId: String? {
+        get {
+            UserDefaults.standard.string(forKey: Constant.subscriptionProductIdKey)
+        }
+        set {
+            if let productId = newValue {
+                UserDefaults.standard.set(productId, forKey: Constant.subscriptionProductIdKey)
+                hasActiveSubscription = true
+            } else {
+                UserDefaults.standard.removeObject(forKey: Constant.subscriptionProductIdKey)
+                hasActiveSubscription = false
+            }
+            NotificationCenter.default.post(
+                name: .subscriptionStatusChanged,
+                object: nil,
+                userInfo: ["isPremium": newValue != nil]
+            )
+        }
+    }
+    
+    // MARK: - Initialization
+    
+    private init() {
+        lastProcessedTransactionId = Self.loadLastProcessedTransactionId()
+        hasActiveSubscription = UserDefaults.standard.string(forKey: Constant.subscriptionProductIdKey) != nil
+    }
+    
+    // MARK: - Public Methods
+    
+    /// Load products from App Store Connect
+    func loadContent() async {
+        isLoading = true
+        
+        do {
+            let storeProducts = try await Product.products(for: Constant.productIds)
+                .sorted(by: { $0.price > $1.price })
+            self.products = storeProducts
+            delegate?.contentWasLoaded(with: storeProducts)
+            
+            print("✅ SubscriptionManager: Loaded \(storeProducts.count) products")
+        } catch {
+            delegate?.errorOccurred(error: error)
+            print("❌ SubscriptionManager: Failed to load products - \(error)")
+        }
+        
+        isLoading = false
+    }
+    
+    /// Purchase a product
+    func purchaseProduct(product: Product) async {
+        do {
+            let result = try await product.purchase()
+            
+            switch result {
+            case .success(let verification):
+                switch verification {
+                case .verified(let transaction):
+                    let productId = transaction.productID
+                    let transactionId = transaction.id
+                    
+                    currentProductId = productId
+                    lastTransactionId = String(transactionId)
+                    
+                    await transaction.finish()
+                    
+                    // Register subscription with backend (sends product + expiry for reliable storage)
+                    await validateWithBackend(
+                        originalTransactionId: String(transactionId),
+                        productId: productId,
+                        expiresDate: transaction.expirationDate
+                    )
+                    
+                    guard registerProcessedTransaction(transactionId) else { return }
+                    delegate?.purchasedSuccessfully(with: productId, transactionId: transactionId)
+                    
+                    // Track analytics
+                    let plan: AnalyticsEvent.SubscriptionPlan = productId.contains("weekly") ? .weekly : .yearly
+                    Analytics.track(.purchaseCompleted(plan: plan, transactionId: String(transactionId)))
+                    
+                    print("✅ SubscriptionManager: Purchase successful - \(productId)")
+                    
+                case .unverified(_, let error):
+                    delegate?.errorOccurred(error: error)
+                    Analytics.track(.purchaseFailed(plan: .weekly, error: error.localizedDescription))
+                }
+                
+            case .userCancelled:
+                delegate?.errorOccurred(error: IAPError.cancelledByUser)
+                
+            case .pending:
+                delegate?.errorOccurred(error: IAPError.paymentRequestIsNotFinished)
+                
+            @unknown default:
+                delegate?.errorOccurred(error: IAPError.purchaseFail)
+            }
+        } catch {
+            delegate?.errorOccurred(error: error)
+            Analytics.track(.purchaseFailed(plan: .weekly, error: error.localizedDescription))
+        }
+    }
+    
+    /// Restore purchases
+    func restorePurchases() async {
+        Analytics.track(.restoreStarted)
+        var restored = false
+        
+        for await result in Transaction.currentEntitlements {
+            switch result {
+            case .verified(let transaction):
+                let productId = transaction.productID
+                
+                currentProductId = productId
+                lastTransactionId = String(transaction.id)
+                
+                delegate?.restoredSuccessfully(with: productId)
+                await transaction.finish()
+                await validateWithBackend(
+                    originalTransactionId: String(transaction.id),
+                    productId: productId,
+                    expiresDate: transaction.expirationDate
+                )
+                restored = true
+                
+                print("✅ SubscriptionManager: Restored subscription - \(productId)")
+                
+            case .unverified(_, let error):
+                delegate?.errorOccurred(error: error)
+            }
+        }
+        
+        if restored {
+            Analytics.track(.restoreCompleted)
+        } else {
+            delegate?.errorOccurred(error: IAPError.restoringFail)
+            Analytics.track(.restoreFailed(error: "No purchases to restore"))
+        }
+    }
+    
+    /// Refresh subscription status from StoreKit, syncing with backend on every launch.
+    /// This ensures the backend always has the latest expiration date.
+    func refreshSubscriptionStatus() async {
+        // 1. Try StoreKit entitlements first — this is the source of truth
+        for await result in Transaction.currentEntitlements {
+            switch result {
+            case .verified(let transaction):
+                currentProductId = transaction.productID
+                lastTransactionId = String(transaction.id)
+                // Send full details so backend always has the latest expiration
+                await validateWithBackend(
+                    originalTransactionId: String(transaction.id),
+                    productId: transaction.productID,
+                    expiresDate: transaction.expirationDate
+                )
+                return
+            case .unverified:
+                continue
+            }
+        }
+        
+        // 2. No StoreKit entitlements — check with backend using stored transaction
+        //    (backend will verify if the subscription record is still valid)
+        if let txId = lastTransactionId {
+            await validateWithBackend(originalTransactionId: txId)
+            return
+        }
+        
+        // 3. Nothing stored — not subscribed
+        currentProductId = nil
+    }
+    
+    /// Start listening for transaction updates (call at app launch)
+    func startTransactionUpdatesListener() {
+        transactionUpdatesTask?.cancel()
+        
+        transactionUpdatesTask = Task.detached { [weak self] in
+            for await update in Transaction.updates {
+                guard let self else { continue }
+                
+                if case .verified(let transaction) = update {
+                    await transaction.finish()
+                    
+                    // Capture transaction data before crossing to MainActor
+                    let productId = transaction.productID
+                    let transactionId = transaction.id
+                    let expiresDate = transaction.expirationDate
+                    
+                    await MainActor.run {
+                        self.currentProductId = productId
+                        self.lastTransactionId = String(transactionId)
+                        
+                        guard self.registerProcessedTransaction(transactionId) else { return }
+                        self.delegate?.purchasedSuccessfully(with: productId, transactionId: transactionId)
+                        
+                        // Register with backend (full details for reliable storage)
+                        Task {
+                            await self.validateWithBackend(
+                                originalTransactionId: String(transactionId),
+                                productId: productId,
+                                expiresDate: expiresDate
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Get product by plan type
+    func product(for plan: SubscriptionPlan) -> Product? {
+        products.first { $0.id == plan.productId }
+    }
+    
+    // MARK: - Private Methods
+    
+    /// Detect if we're in sandbox (TestFlight, Xcode debug, or sandbox tester).
+    /// Backend must use Apple's sandbox API to verify these transactions.
+    private var useSandboxForValidation: Bool {
+        #if DEBUG
+        return true
+        #else
+        guard let url = Bundle.main.appStoreReceiptURL else { return false }
+        let path = url.path.lowercased()
+        return path.contains("sandboxreceipt")
+        #endif
+    }
+    
+    private func validateWithBackend(
+        originalTransactionId: String,
+        productId: String? = nil,
+        expiresDate: Date? = nil
+    ) async {
+        do {
+            let result = try await SubscriptionValidationService.shared.validateSubscription(
+                originalTransactionId: originalTransactionId,
+                productId: productId,
+                expiresDate: expiresDate,
+                useSandbox: useSandboxForValidation
+            )
+            
+            if result.isValid {
+                // Backend confirms subscription is active — sync local state
+                if let productId = result.productId {
+                    currentProductId = productId
+                }
+                AppState.shared.setPremiumStatus(
+                    true,
+                    generationsRemaining: result.generationsRemaining,
+                    generationLimit: result.generationLimit
+                )
+            } else {
+                // Backend says subscription expired — clear local state
+                currentProductId = nil
+                lastTransactionId = nil
+                AppState.shared.setPremiumStatus(false)
+            }
+        } catch {
+            print("⚠️ SubscriptionManager: Backend validation failed - \(error)")
+            // Network error — keep whatever state we have, don't clear
+        }
+    }
+    
+    private func registerProcessedTransaction(_ id: UInt64) -> Bool {
+        guard lastProcessedTransactionId != id else { return false }
+        lastProcessedTransactionId = id
+        persistLastProcessedTransactionId()
+        return true
+    }
+    
+    private func persistLastProcessedTransactionId() {
+        guard let id = lastProcessedTransactionId else {
+            _ = KeychainManager.shared.delete(key: Constant.processedTransactionKey)
+            return
+        }
+        _ = KeychainManager.shared.store(key: Constant.processedTransactionKey, value: "\(id)")
+    }
+    
+    private static func loadLastProcessedTransactionId() -> UInt64? {
+        guard let string = KeychainManager.shared.retrieve(key: Constant.processedTransactionKey),
+              let id = UInt64(string) else { return nil }
+        return id
+    }
+}
