@@ -79,6 +79,9 @@ struct EffectShowcaseCard: View {
         .padding(VideoSpacing.md)
     }
 
+    private static let originalImageWidth: CGFloat = 52
+    private static let originalImageHeight: CGFloat = originalImageWidth * 16.0 / 9.0
+
     @ViewBuilder
     private var beforeImageBadge: some View {
         if let url = effect.fullSampleInputImageUrl {
@@ -90,7 +93,7 @@ struct EffectShowcaseCard: View {
                 } placeholder: {
                     Color.videoSurface
                 }
-                .frame(width: 52, height: 52)
+                .frame(width: Self.originalImageWidth, height: Self.originalImageHeight)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)

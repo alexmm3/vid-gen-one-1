@@ -121,7 +121,7 @@ final class EffectService: ObservableObject {
             var grouped: [UUID: [Effect]] = [:]
             var flat: [Effect] = []
             for effect in effects {
-                guard effect.previewVideoUrl != nil || effect.thumbnailUrl != nil else {
+                guard effect.previewVideoUrl != nil else {
                     continue
                 }
                 flat.append(effect)

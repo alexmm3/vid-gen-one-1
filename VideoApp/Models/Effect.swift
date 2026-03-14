@@ -84,11 +84,10 @@ struct Effect: Identifiable, Codable, Equatable {
         case updatedAt = "updated_at"
     }
 
-    /// URL for catalog card preview (video or thumbnail)
+    /// URL for catalog card preview (video only — effects without video are hidden from catalog)
     var fullPreviewUrl: URL? {
-        if let url = previewVideoUrl, let u = URL(string: url) { return u }
-        if let url = thumbnailUrl, let u = URL(string: url) { return u }
-        return nil
+        guard let url = previewVideoUrl else { return nil }
+        return URL(string: url)
     }
 
     /// URL for thumbnail image on cards

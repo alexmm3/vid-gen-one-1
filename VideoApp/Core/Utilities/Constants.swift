@@ -88,15 +88,31 @@ extension Bundle {
 // MARK: - External URLs
 
 enum ExternalURLs {
+    /// Placeholder URL when privacy policy or terms are not yet configured.
+    /// Apple's standard EULA is commonly used during development.
+    private static let placeholderLegalURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
+    
     static var privacyPolicy: URL {
-        URL(string: Secrets.privacyPolicyUrl)!
+        let urlString = Secrets.privacyPolicyUrl
+        guard !urlString.isEmpty, let url = URL(string: urlString) else {
+            return placeholderLegalURL
+        }
+        return url
     }
     
     static var termsOfUse: URL {
-        URL(string: Secrets.termsOfUseUrl)!
+        let urlString = Secrets.termsOfUseUrl
+        guard !urlString.isEmpty, let url = URL(string: urlString) else {
+            return placeholderLegalURL
+        }
+        return url
     }
     
     static var support: URL {
+        let email = Secrets.supportEmail
+        guard !email.isEmpty else {
+            return URL(string: "mailto:support@example.com")!
+        }
         let subject = "\(AppConstants.appName) – Support Request"
         let device = UIDevice.current
         let body = """
@@ -112,16 +128,18 @@ enum ExternalURLs {
         
         var components = URLComponents()
         components.scheme = "mailto"
-        components.path = Secrets.supportEmail
+        components.path = email
         components.queryItems = [
             URLQueryItem(name: "subject", value: subject),
             URLQueryItem(name: "body", value: body)
         ]
-        return components.url!
+        return components.url ?? URL(string: "mailto:\(email)")!
     }
     
     static var appStore: URL {
-        URL(string: "https://apps.apple.com/app/id\(Secrets.appStoreId)")!
+        let id = Secrets.appStoreId
+        let urlString = id.isEmpty ? "https://apps.apple.com" : "https://apps.apple.com/app/id\(id)"
+        return URL(string: urlString) ?? URL(string: "https://apps.apple.com")!
     }
     
     /// Placeholder App Store link (update when app is published)
@@ -135,7 +153,11 @@ enum ExternalURLs {
     }
     
     static var appStoreReview: URL {
-        URL(string: "https://apps.apple.com/app/id\(Secrets.appStoreId)?action=write-review")!
+        let id = Secrets.appStoreId
+        let urlString = id.isEmpty
+            ? "https://apps.apple.com"
+            : "https://apps.apple.com/app/id\(id)?action=write-review"
+        return URL(string: urlString) ?? URL(string: "https://apps.apple.com")!
     }
 }
 
