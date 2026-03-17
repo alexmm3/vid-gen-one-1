@@ -39,13 +39,15 @@ final class StorageService {
         return try await uploadPortraitData(imageData)
     }
     
-    /// Upload image with smart aspect ratio detection.
-    /// Crops to the nearest standard ratio (9:16, 3:4, 1:1, 4:3, 16:9) instead
-    /// of forcing portrait, preserving the user's original composition.
+    /// Upload image, always center-cropped to 9:16.
+    /// Trims left/right for wide images, top/bottom for tall ones —
+    /// keeping the centre of the frame. Always reports "9:16" so Grok
+    /// generates a full-screen portrait video with no black bars.
     func uploadImage(_ image: UIImage) async throws -> ImageUploadResult {
-        let oriented = image.fixedOrientation()
-        let (cropped, category) = oriented.croppedToStandardRatio()
-        let processed = cropped.resizedToMax(dimension: AppConstants.ImageProcessing.maxDimension)
+        let processed = image
+            .fixedOrientation()
+            .croppedTo9by16()
+            .resizedToMax(dimension: AppConstants.ImageProcessing.maxDimension)
         
         guard let imageData = processed.compressedJPEGData(
             quality: AppConstants.ImageProcessing.compressionQuality
@@ -54,7 +56,7 @@ final class StorageService {
         }
         
         let url = try await uploadPortraitData(imageData)
-        return ImageUploadResult(url: url, detectedAspectRatio: category.apiValue)
+        return ImageUploadResult(url: url, detectedAspectRatio: "9:16")
     }
     
     /// Upload portrait image data and return public URL

@@ -46,7 +46,7 @@ INSERT INTO public.pipeline_steps (
   'video_generate',
   'Generate Video',
   'grok',
-  '{"model": "grok-imagine-video", "prompt_source": "effect_concept_resolved", "image_source": "enhanced_image", "duration": 5, "aspect_ratio": "9:16"}',
+  '{"model": "grok-imagine-video", "prompt_source": "effect_concept_resolved", "image_source": "enhanced_image", "duration": 6, "aspect_ratio": "9:16"}',
   '{"image": "pipeline.enhanced_image"}',
   '{"provider_request_id": "result.request_id"}',
   true
@@ -73,7 +73,7 @@ ON CONFLICT DO NOTHING;
 
 
 -- =============================================================================
--- SCENARIO B: Vision-Enriched Generation (Grok Vision -> Grok Text -> Grok Video)
+-- SCENARIO B: Vision-Enriched Generation (Gemini Vision Analysis -> Grok Video)
 -- =============================================================================
 
 -- Create Pipeline Template
@@ -86,7 +86,7 @@ VALUES (
   true
 ) ON CONFLICT (id) DO NOTHING;
 
--- Step 1: Grok Vision Analysis
+-- Step 1: Gemini Vision Analysis
 INSERT INTO public.pipeline_steps (
   pipeline_id, step_order, step_type, name, provider, config, input_mapping, output_mapping, is_required
 ) VALUES (
@@ -94,39 +94,24 @@ INSERT INTO public.pipeline_steps (
   0,
   'image_analyze',
   'Analyze Image',
-  'grok',
-  '{"model": "grok-vision", "prompt_template": "Describe in detail what you see in this image: the subject, setting, mood, and notable details.", "output_key": "image_description", "max_tokens": 300}',
+  'gemini',
+  '{"model": "gemini-3.1-pro-preview", "prompt_template": "Analyze this image in detail: identify the subject, setting, mood, and notable details. Then, using your analysis, write a video generation prompt that weaves the specific image details into the following effect concept: ''{{effect_concept}}''. If the user provided additional context, incorporate it: ''{{user_prompt}}''. Your output must be ONLY the final video generation prompt text, ready to use for video generation. Keep it under 100 words.", "output_key": "video_prompt", "max_tokens": 500}',
   '{"image": "pipeline.user_image"}',
-  '{"image_description": "result.image_description"}',
+  '{"video_prompt": "result.video_prompt"}',
   true
 ) ON CONFLICT (pipeline_id, step_order) DO NOTHING;
 
--- Step 2: Grok Prompt Enrichment
+-- Step 2: Grok Video Generation
 INSERT INTO public.pipeline_steps (
   pipeline_id, step_order, step_type, name, provider, config, input_mapping, output_mapping, is_required
 ) VALUES (
   '22222222-2222-2222-2222-222222222222',
   1,
-  'prompt_enrich',
-  'Enrich Prompt',
-  'grok',
-  '{"model": "grok-text", "prompt_template": "You are a creative video director. Image description: ''{{image_description}}''. Effect goal: ''{{effect_concept}}''. User request: ''{{user_prompt}}''. Write a detailed, personalized video generation prompt that weaves specific details from the image into the effect concept. Keep it under 100 words.", "output_key": "enriched_prompt"}',
-  '{"prompt_context": "pipeline.image_description"}',
-  '{"enriched_prompt": "result.enriched_prompt"}',
-  true
-) ON CONFLICT (pipeline_id, step_order) DO NOTHING;
-
--- Step 3: Grok Video Generation
-INSERT INTO public.pipeline_steps (
-  pipeline_id, step_order, step_type, name, provider, config, input_mapping, output_mapping, is_required
-) VALUES (
-  '22222222-2222-2222-2222-222222222222',
-  2,
   'video_generate',
   'Generate Video',
   'grok',
-  '{"model": "grok-imagine-video", "prompt_source": "enriched_prompt", "duration": 5, "aspect_ratio": "9:16"}',
-  '{"image": "pipeline.user_image", "prompt": "pipeline.enriched_prompt"}',
+  '{"model": "grok-imagine-video", "prompt_source": "video_prompt", "duration": 6, "aspect_ratio": "9:16"}',
+  '{"image": "pipeline.user_image"}',
   '{"provider_request_id": "result.request_id"}',
   true
 ) ON CONFLICT (pipeline_id, step_order) DO NOTHING;

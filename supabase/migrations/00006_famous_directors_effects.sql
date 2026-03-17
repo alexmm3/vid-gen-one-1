@@ -2,10 +2,10 @@
 -- Famous Directors: 6 effects and their pipelines
 -- 1. Perspective Warp (Direct)
 -- 2. Room Breathing (Pipeline A: enhance -> video)
--- 3. Selective Time Aging (Pipeline B: analyze -> enrich -> video)
--- 4. Slow Reality (Pipeline B: analyze -> enrich -> video)
--- 5. Emotional Environment (Pipeline B: emotion analyze -> enrich -> video)
--- 6. Nanite Disassembly (Pipeline C: enhance -> analyze -> enrich -> video)
+-- 3. Selective Time Aging (Pipeline B: analyze -> video)
+-- 4. Slow Reality (Pipeline B: analyze -> video)
+-- 5. Emotional Environment (Pipeline B: emotion analyze -> video)
+-- 6. Nanite Disassembly (Pipeline C: enhance -> analyze -> video)
 -- =============================================================================
 
 -- Category (upsert by id so re-runs are safe)
@@ -40,7 +40,7 @@ INSERT INTO public.effects (
   false,
   'A dramatic Vertigo-style dolly zoom effect. The room gradually warps and bends inward as if the walls are being pulled toward the subject. The distortion increases slowly, creating a surreal, disorienting feeling. The subject stays sharp and undistorted. Cinematic, smooth motion.',
   'grok',
-  '{"duration": 5, "aspect_ratio": "9:16"}'::jsonb
+  '{"duration": 6, "aspect_ratio": "9:16"}'::jsonb
 )
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
@@ -81,7 +81,7 @@ INSERT INTO public.pipeline_steps (
   'video_generate',
   'Generate Video',
   'grok',
-  '{"model": "grok-imagine-video", "prompt_source": "effect_concept_resolved", "image_source": "enhanced_image", "duration": 5, "aspect_ratio": "9:16"}',
+  '{"model": "grok-imagine-video", "prompt_source": "effect_concept_resolved", "image_source": "enhanced_image", "duration": 6, "aspect_ratio": "9:16"}',
   '{"image": "pipeline.enhanced_image"}',
   '{"provider_request_id": "result.request_id"}',
   true
@@ -117,7 +117,7 @@ INSERT INTO public.effect_pipelines (effect_id, pipeline_id, is_active)
 VALUES ('fd200002-0002-4000-8000-000000000002', 'fd100001-0001-4000-8000-000000000001', true);
 
 -- =============================================================================
--- 3. SELECTIVE TIME AGING — Pipeline B (image_analyze -> prompt_enrich -> video_generate)
+-- 3. SELECTIVE TIME AGING — Pipeline B (image_analyze -> video_generate)
 -- =============================================================================
 INSERT INTO public.pipeline_templates (id, name, description, version, is_active)
 VALUES (
@@ -137,30 +137,19 @@ INSERT INTO public.pipeline_steps (
   0,
   'image_analyze',
   'Identify Objects',
-  'grok',
-  '{"model": "grok-4-1-fast-non-reasoning", "prompt_template": "Identify all distinct objects in this image. For each object list: name, position, material type. Focus on objects that would show visible aging — flowers, plants, wood, fabric, skin, metal, food. Return a structured list.", "output_key": "image_description", "max_tokens": 400}',
+  'gemini',
+  '{"model": "gemini-3.1-pro-preview", "prompt_template": "You are a time-manipulation VFX director. Analyze this image carefully and identify all distinct objects. Focus on objects that would show visible aging — flowers, plants, wood, fabric, skin, metal, food. For each, note its name, position, and material type. Then pick the ONE most visually dramatic object to age rapidly. Write a single video generation prompt (under 80 words) where only that chosen object decays or ages over 5 seconds while everything else stays completely frozen in time. Be specific about the aging process for that material. Output ONLY the final video generation prompt, nothing else.", "output_key": "video_prompt", "max_tokens": 500}',
   '{"image": "pipeline.user_image"}',
-  '{"image_description": "result.image_description"}',
+  '{"video_prompt": "result.video_prompt"}',
   true
 ),
 (
   'fd100002-0002-4000-8000-000000000002',
   1,
-  'prompt_enrich',
-  'Pick One to Age',
-  'grok',
-  '{"model": "grok-3-mini-fast", "prompt_template": "You are a time-manipulation director. Objects in scene: ''{{image_description}}''. Pick the ONE most visually dramatic object to age rapidly. Write a single video generation prompt where only that object decays or ages over 5 seconds while everything else stays completely frozen. Be specific about the aging process for that material. Under 80 words.", "output_key": "enriched_prompt", "max_tokens": 300}',
-  '{}',
-  '{"enriched_prompt": "result.enriched_prompt"}',
-  true
-),
-(
-  'fd100002-0002-4000-8000-000000000002',
-  2,
   'video_generate',
   'Generate Video',
   'grok',
-  '{"model": "grok-imagine-video", "prompt_source": "enriched_prompt", "image_source": "user_image", "duration": 5, "aspect_ratio": "9:16"}',
+  '{"model": "grok-imagine-video", "prompt_source": "video_prompt", "image_source": "user_image", "duration": 6, "aspect_ratio": "9:16"}',
   '{"image": "pipeline.user_image"}',
   '{"provider_request_id": "result.request_id"}',
   true
@@ -216,30 +205,19 @@ INSERT INTO public.pipeline_steps (
   0,
   'image_analyze',
   'Describe Layers',
-  'grok',
-  '{"model": "grok-4-1-fast-non-reasoning", "prompt_template": "Describe the layers of this image: 1) Main subject in foreground — who or what, position, pose. 2) Background elements — environment, objects, people, anything that could have motion. Be specific.", "output_key": "image_description", "max_tokens": 350}',
+  'gemini',
+  '{"model": "gemini-3.1-pro-preview", "prompt_template": "You are a time-bending cinematographer. Analyze the layers of this image: 1) The main subject in the foreground — who or what, their position and pose. 2) Background elements — environment, objects, people, anything that could have independent motion. Then write a video generation prompt where the foreground subject moves at normal speed while ALL background elements move in dreamy slow motion (about 4x slower). Describe specific background motions based on what you see. Output ONLY the final video generation prompt, under 90 words.", "output_key": "video_prompt", "max_tokens": 500}',
   '{"image": "pipeline.user_image"}',
-  '{"image_description": "result.image_description"}',
+  '{"video_prompt": "result.video_prompt"}',
   true
 ),
 (
   'fd100003-0003-4000-8000-000000000003',
   1,
-  'prompt_enrich',
-  'Dual-Speed Prompt',
-  'grok',
-  '{"model": "grok-3-mini-fast", "prompt_template": "You are a time-bending cinematographer. Scene: ''{{image_description}}''. Write a video prompt: the foreground subject moves at normal speed; ALL background elements move in dreamy slow motion (about 4x slower). Describe specific background motions. Under 90 words.", "output_key": "enriched_prompt", "max_tokens": 350}',
-  '{}',
-  '{"enriched_prompt": "result.enriched_prompt"}',
-  true
-),
-(
-  'fd100003-0003-4000-8000-000000000003',
-  2,
   'video_generate',
   'Generate Video',
   'grok',
-  '{"model": "grok-imagine-video", "prompt_source": "enriched_prompt", "image_source": "user_image", "duration": 5, "aspect_ratio": "9:16"}',
+  '{"model": "grok-imagine-video", "prompt_source": "video_prompt", "image_source": "user_image", "duration": 6, "aspect_ratio": "9:16"}',
   '{"image": "pipeline.user_image"}',
   '{"provider_request_id": "result.request_id"}',
   true
@@ -295,30 +273,19 @@ INSERT INTO public.pipeline_steps (
   0,
   'image_analyze',
   'Emotion and Appearance',
-  'grok',
-  '{"model": "grok-4-1-fast-non-reasoning", "prompt_template": "Analyze the person''s facial expression and body language. Classify the dominant emotion as ONE of: sad, happy, confident, anxious, angry, peaceful, surprised, contemplative. Also describe the person''s appearance briefly. Return format: EMOTION: [emotion] DESCRIPTION: [brief appearance and setting].", "output_key": "image_description", "max_tokens": 200}',
+  'gemini',
+  '{"model": "gemini-3.1-pro-preview", "prompt_template": "You are an environment designer for emotional cinema. Analyze this person''s facial expression and body language. Classify the dominant emotion as ONE of: sad, happy, confident, anxious, angry, peaceful, surprised, contemplative. Also note their appearance briefly. Then map the detected emotion to an environment: sad → rain-soaked apartment with droplets on windows; confident → golden-hour rooftop skyline; happy → sun-drenched meadow; anxious → flickering fluorescent office; angry → stormy seascape; peaceful → misty mountain lake; surprised → surreal floating objects; contemplative → quiet library at dusk. Write a single video generation prompt placing this person in the matching environment with atmospheric details. Output ONLY the final video generation prompt, under 80 words.", "output_key": "video_prompt", "max_tokens": 500}',
   '{"image": "pipeline.user_image"}',
-  '{"image_description": "result.image_description"}',
+  '{"video_prompt": "result.video_prompt"}',
   true
 ),
 (
   'fd100004-0004-4000-8000-000000000004',
   1,
-  'prompt_enrich',
-  'Map Emotion to Environment',
-  'grok',
-  '{"model": "grok-3-mini-fast", "prompt_template": "You are an environment designer for emotional cinema. The subject feels: ''{{image_description}}''. Map this emotion to an environment: sad -> rain-soaked apartment with droplets on windows; confident -> golden-hour rooftop skyline; happy -> sun-drenched meadow; anxious -> flickering fluorescent office; angry -> stormy seascape; peaceful -> misty mountain lake; surprised -> surreal floating objects; contemplative -> quiet library at dusk. Write one video prompt placing this person in the matching environment with atmospheric details. Under 80 words.", "output_key": "enriched_prompt", "max_tokens": 300}',
-  '{}',
-  '{"enriched_prompt": "result.enriched_prompt"}',
-  true
-),
-(
-  'fd100004-0004-4000-8000-000000000004',
-  2,
   'video_generate',
   'Generate Video',
   'grok',
-  '{"model": "grok-imagine-video", "prompt_source": "enriched_prompt", "image_source": "user_image", "duration": 5, "aspect_ratio": "9:16"}',
+  '{"model": "grok-imagine-video", "prompt_source": "video_prompt", "image_source": "user_image", "duration": 6, "aspect_ratio": "9:16"}',
   '{"image": "pipeline.user_image"}',
   '{"provider_request_id": "result.request_id"}',
   true
@@ -354,13 +321,13 @@ INSERT INTO public.effect_pipelines (effect_id, pipeline_id, is_active)
 VALUES ('fd200005-0005-4000-8000-000000000005', 'fd100004-0004-4000-8000-000000000004', true);
 
 -- =============================================================================
--- 6. NANITE DISASSEMBLY — Pipeline C (4 steps)
+-- 6. NANITE DISASSEMBLY — Pipeline C (3 steps)
 -- =============================================================================
 INSERT INTO public.pipeline_templates (id, name, description, version, is_active)
 VALUES (
   'fd100005-0005-4000-8000-000000000005',
   'Nanite Disassembly',
-  'Sci-fi enhance, analyze subject, enrich nanite prompt, generate.',
+  'Sci-fi enhance, analyze subject, generate.',
   1,
   true
 )
@@ -375,7 +342,7 @@ INSERT INTO public.pipeline_steps (
   'image_enhance',
   'Sci-Fi Aesthetic',
   'gemini',
-  '{"model": "gemini-3.1-flash-image-preview", "prompt_template": "Enhance this image with a subtle sci-fi aesthetic: add a faint metallic sheen to skin, slightly boost contrast, add a very subtle blue-tech tint to highlights. Keep the subject fully recognizable and identical. {{user_prompt}}", "quality": "high"}',
+  '{"model": "gemini-3.1-flash-image-preview", "prompt_template": "Enhance this image for cinematic quality: sharpen the focal subject, balance exposure and contrast, and ensure the lighting direction reads clearly. Preserve the original color palette, textures, and visual style exactly. Do not add any tints, overlays, or stylistic changes. Keep the subject fully recognizable and identical. {{user_prompt}}", "quality": "high"}',
   '{"image": "pipeline.user_image"}',
   '{"enhanced_image": "result.image_url", "enhanced_image_storage_path": "result.storage_path"}',
   true
@@ -385,30 +352,19 @@ INSERT INTO public.pipeline_steps (
   1,
   'image_analyze',
   'Describe Subject',
-  'grok',
-  '{"model": "grok-4-1-fast-non-reasoning", "prompt_template": "Describe the subject in detail: face shape, hair, clothing, accessories, pose, expression. What colors dominate? What textures are visible?", "output_key": "image_description", "max_tokens": 300}',
+  'gemini',
+  '{"model": "gemini-3.1-pro-preview", "prompt_template": "You are a VFX supervisor writing a cinematic image-to-video animation prompt. Analyze this image carefully: identify the main focal subject (the most visually central and semantically important element), its silhouette, proportions, surface textures and materials, the surrounding environment, and the lighting direction. Then write a video generation prompt for this effect: the focal subject gradually breaks down into countless nanite-like particles — microscopic metallic fragments or luminous programmable grains — that are immediately carried away by the wind as they detach, flowing in streams, arcs, and curved trails. No accumulation. The subject progressively loses all visible structure until completely gone. The surrounding environment remains stable with only subtle wind reactions (vegetation, fabric). Lighting stays consistent with the original; particles reflect and shimmer as they drift. Static centered cinematic camera. Subject completely absent by the end. Output ONLY the final video generation prompt, under 90 words.", "output_key": "video_prompt", "max_tokens": 600}',
   '{"image": "pipeline.enhanced_image"}',
-  '{"image_description": "result.image_description"}',
+  '{"video_prompt": "result.video_prompt"}',
   true
 ),
 (
   'fd100005-0005-4000-8000-000000000005',
   2,
-  'prompt_enrich',
-  'Nanite Sequence',
-  'grok',
-  '{"model": "grok-3-mini-fast", "prompt_template": "You are a VFX supervisor. Subject: ''{{image_description}}''. Create a nanite disassembly sequence: the subject breaks apart into thousands of tiny glowing particles (starting from one edge or the center). The particles swarm, pulse with light matching the subject''s colors, then reassemble into a slightly transformed, elevated version. 5 seconds. Under 90 words.", "output_key": "enriched_prompt", "max_tokens": 400}',
-  '{}',
-  '{"enriched_prompt": "result.enriched_prompt"}',
-  true
-),
-(
-  'fd100005-0005-4000-8000-000000000005',
-  3,
   'video_generate',
   'Generate Video',
   'grok',
-  '{"model": "grok-imagine-video", "prompt_source": "enriched_prompt", "image_source": "enhanced_image", "duration": 5, "aspect_ratio": "9:16"}',
+  '{"model": "grok-imagine-video", "prompt_source": "video_prompt", "image_source": "enhanced_image", "duration": 6, "aspect_ratio": "9:16"}',
   '{"image": "pipeline.enhanced_image"}',
   '{"provider_request_id": "result.request_id"}',
   true
@@ -424,13 +380,13 @@ INSERT INTO public.effects (
 ) VALUES (
   'fd200006-0006-4000-8000-000000000006',
   'Nanite Disassembly',
-  'Subject breaks into swarming nanites that reassemble differently. Sci-fi flair.',
+  'Subject dissolves into nanite particles swept away by wind until completely gone. Atmospheric sci-fi.',
   'fd000000-0000-4000-8000-000000000001',
   true,
   false,
   6,
   false,
-  'The subject disintegrates into thousands of glowing nanite particles that swarm and reassemble into a transformed version.',
+  'The focal subject gradually breaks down into countless nanite-like particles that are immediately carried away by the wind until the subject completely disappears, leaving only the stable environment.',
   'grok',
   '{}'::jsonb
 )

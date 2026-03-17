@@ -5,6 +5,7 @@ import { checkDeviceSubscription } from "../_shared/subscription-check.ts";
 import { isValidPublicUrl } from "../_shared/url-utils.ts";
 import { runPipeline, type PipelineContext } from "../_shared/pipeline-orchestrator.ts";
 import { loadGenerationGlobals, applyVideoGlobals } from "../_shared/generation-globals.ts";
+import { resolveTargetAspectRatio } from "../_shared/aspect-ratio.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,6 +18,7 @@ interface GenerateVideoRequest {
   input_image_url: string;
   secondary_image_url?: string;
   user_prompt?: string;
+  detected_aspect_ratio?: string;
 }
 
 interface ProviderConfig {
@@ -60,7 +62,7 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
     const body: GenerateVideoRequest = await req.json();
 
-    const { device_id, effect_id, input_image_url, secondary_image_url, user_prompt } = body;
+    const { device_id, effect_id, input_image_url, secondary_image_url, user_prompt, detected_aspect_ratio } = body;
 
     logger.info("request.parsed", {
       metadata: { device_id, effect_id, has_prompt: !!user_prompt, has_secondary: !!secondary_image_url },
@@ -217,6 +219,11 @@ serve(async (req) => {
       logger.info("pipeline.routing", { metadata: { pipeline_id: effectPipeline.pipeline_id } });
 
       try {
+        const targetAspectRatio = resolveTargetAspectRatio({
+          detectedAspectRatio: detected_aspect_ratio,
+          effectDefaultAspectRatio: (effect.generation_params as Record<string, unknown>)?.aspect_ratio as string | undefined,
+        });
+
         const pipelineContext: PipelineContext = {
           user_image: input_image_url,
           user_prompt: user_prompt || "",
@@ -224,6 +231,7 @@ serve(async (req) => {
           effect_name: effect.name,
           effect_concept: effect.system_prompt_template,
           effect_concept_resolved: finalPrompt,
+          target_aspect_ratio: targetAspectRatio,
           ...(secondary_image_url ? { secondary_image: secondary_image_url } : {}),
         };
 

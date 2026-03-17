@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Logger } from "./logger.ts";
 import { executeGeminiImage } from "./providers/gemini-image.ts";
+import { executeGeminiVision } from "./providers/gemini-vision.ts";
 import { executeGrokVision } from "./providers/grok-vision.ts";
 import { executeGrokText } from "./providers/grok-text.ts";
 import { executeGrokVideo } from "./providers/grok-video.ts";
@@ -168,6 +169,21 @@ async function executeStep(
 
     case "image_analyze": {
       const imageUrl = (inputs.image as string) || context.user_image;
+      const outputKey = (config.output_key as string) || "image_description";
+
+      if (step.provider === "gemini") {
+        const output = await executeGeminiVision(
+          {
+            imageUrl,
+            prompt: resolvedPrompt,
+            model: modelOverride || (config.model as string | undefined),
+            maxTokens: config.max_tokens as number | undefined,
+          },
+          logger,
+        );
+        return { result: { [outputKey]: output.description } };
+      }
+
       const output = await executeGrokVision(
         {
           imageUrl,
@@ -177,7 +193,6 @@ async function executeStep(
         },
         logger,
       );
-      const outputKey = (config.output_key as string) || "image_description";
       return { result: { [outputKey]: output.description } };
     }
 
@@ -206,8 +221,8 @@ async function executeStep(
         ? (context[imageSource] as string) || context.user_image
         : context.user_image;
 
-      const rawAspectRatio = (config.aspect_ratio as string)
-        || (context.target_aspect_ratio as string)
+      const rawAspectRatio = (context.target_aspect_ratio as string)
+        || (config.aspect_ratio as string)
         || undefined;
 
       const videoParams = applyVideoGlobals(globals, {
@@ -267,6 +282,24 @@ export async function runPipeline(
   }
 
   logger.info("pipeline.steps_loaded", { metadata: { step_count: steps.length } });
+
+  // Pre-flight: warn about input mappings that reference context keys not produced by earlier steps
+  const producedKeys = new Set(["user_image", "user_prompt", "effect_id", "effect_name", "effect_concept", "secondary_image", "target_aspect_ratio", "effect_concept_resolved"]);
+  for (const s of (steps as PipelineStep[])) {
+    for (const [, path] of Object.entries(s.input_mapping)) {
+      if (typeof path === "string" && path.startsWith("pipeline.")) {
+        const key = path.substring(9);
+        if (!producedKeys.has(key)) {
+          logger.warn("pipeline.preflight.missing_input", {
+            metadata: { step_name: s.name, step_order: s.step_order, missing_key: key },
+          });
+        }
+      }
+    }
+    for (const [contextKey] of Object.entries(s.output_mapping)) {
+      producedKeys.add(contextKey);
+    }
+  }
 
   const { data: pipelineExecution, error: peError } = await supabase
     .from("pipeline_executions")
@@ -441,7 +474,7 @@ export async function runPipeline(
   return {
     pipelineExecutionId,
     providerRequestId: lastProviderRequestId,
-    finalPrompt: (context.enriched_prompt as string) || (context.effect_concept as string),
+    finalPrompt: (context.video_prompt as string) || (context.enriched_prompt as string) || (context.effect_concept as string),
     finalImageUrl: (context.enhanced_image as string) || context.user_image,
     context,
     grokVideoAttempts,

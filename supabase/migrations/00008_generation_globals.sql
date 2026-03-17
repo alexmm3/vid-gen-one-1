@@ -11,7 +11,7 @@ VALUES (
   'generation_globals',
   '{
     "video_resolution": "480p",
-    "video_max_duration": 5,
+    "video_max_duration": 6,
     "video_aspect_ratio": null,
     "image_enhance_enabled": true,
     "image_analyze_enabled": true,
