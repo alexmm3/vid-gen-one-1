@@ -111,7 +111,7 @@ final class GenerationViewModel: ObservableObject {
             progress = .completed
             isGenerating = false
             generationSubmitted = false
-            // Don't auto-show result - user will navigate via toast or history
+            AppState.shared.navigateToTab(.myVideos)
         }
     }
     

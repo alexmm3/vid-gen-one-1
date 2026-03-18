@@ -45,12 +45,10 @@ struct GenerationConfirmationView: View {
             GeneratingView(
                 progress: viewModel.progress,
                 canDismiss: viewModel.generationSubmitted,
+                inputImage: photo,
                 onDismiss: {
-                    // Dismiss the generating view - polling continues in background
                     viewModel.dismissGeneratingView()
-                    // Navigate to My Videos so user can see progress
                     appState.navigateToTab(.myVideos)
-                    // Dismiss this view to go back
                     dismiss()
                 }
             )

@@ -105,8 +105,8 @@ final class ToastManager: ObservableObject {
         }
         
         show(Toast(
-            message: "Your video is ready!",
-            icon: "checkmark.circle.fill",
+            message: "Your video just dropped! Tap to watch",
+            icon: "sparkles",
             type: .success,
             action: .navigateToMyVideos
         ))
@@ -205,41 +205,40 @@ struct ToastView: View {
         } label: {
             HStack(spacing: VideoSpacing.sm) {
                 Image(systemName: toast.icon)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(toast.type.iconColor)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(
+                        toast.type == .success
+                        ? AnyShapeStyle(LinearGradient(colors: [.videoAccent, .white], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        : AnyShapeStyle(toast.type.iconColor)
+                    )
                 
                 Text(toast.message)
-                    .font(.videoSubheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.videoTextPrimary)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
                 
-                Spacer()
+                Spacer(minLength: 4)
                 
                 if toast.action == .navigateToMyVideos {
-                    HStack(spacing: VideoSpacing.xxs) {
-                        Text("View")
-                            .font(.videoCaption)
-                            .foregroundColor(.videoAccent)
-                        
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.videoAccent)
-                    }
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(.white.opacity(0.5))
                 }
             }
             .padding(.horizontal, VideoSpacing.md)
-            .padding(.vertical, VideoSpacing.sm)
-            .background(Color.videoSurface)
-            .cornerRadius(VideoSpacing.radiusMedium)
+            .padding(.vertical, 14)
+            .background(.ultraThinMaterial)
+            .background(Color.white.opacity(0.08))
+            .clipShape(Capsule())
             .overlay(
-                RoundedRectangle(cornerRadius: VideoSpacing.radiusMedium)
-                    .stroke(toast.type.iconColor.opacity(0.3), lineWidth: 1)
+                Capsule()
+                    .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
             )
-            .videoElevatedShadow()
+            .shadow(color: .black.opacity(0.4), radius: 20, x: 0, y: 8)
         }
         .buttonStyle(ToastButtonStyle())
         .padding(.horizontal, VideoSpacing.screenHorizontal)
-        .padding(.top, 60) // Below status bar and safe area
+        .padding(.top, 60)
     }
 }
 

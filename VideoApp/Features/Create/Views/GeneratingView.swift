@@ -4,7 +4,6 @@
 //
 //  Full-screen view shown during video generation
 //  Designed to allow user to leave - generation continues in background
-//  Shows rotating status titles to simulate processing activity
 //
 
 import SwiftUI
@@ -13,56 +12,51 @@ struct GeneratingView: View {
     let progress: GenerationViewModel.GenerationProgress
     let onDismiss: (() -> Void)?
     let canDismiss: Bool
+    let inputImage: UIImage?
     
-    @State private var rotation: Double = 0
-    @State private var scale: CGFloat = 1.0
+    @State private var pulseScale: CGFloat = 1.0
+    @State private var shimmerOffset: CGFloat = -1.0
     
-    /// Index into the status titles array
     @State private var currentTitleIndex: Int = 0
-    /// Timer that drives title rotation
     @State private var titleTimer: Timer?
-    
-    // MARK: - Status Titles
-    // Abstract processing phrases shown in sequence during generation.
-    // Each title displays for a random duration (20-35s).
-    // The last title persists indefinitely for long generations.
     
     private static let statusTitles: [String] = [
         "Creating your video...",
-        "Analyzing facial features...",
-        "Mapping body movements...",
-        "Extracting motion frames...",
-        "Building character model...",
-        "Aligning pose sequences...",
-        "Blending motion layers...",
-        "Rendering frame transitions...",
-        "Enhancing visual details...",
-        "Synchronizing with music...",
-        "Smoothing animations...",
-        "Compositing final layers...",
-        "Calibrating color tones...",
-        "Assembling video sequence...",
+        "Analyzing your photo...",
+        "Building your character...",
+        "Rendering video frames...",
         "Applying finishing touches..."
     ]
     
     init(
         progress: GenerationViewModel.GenerationProgress,
         canDismiss: Bool = false,
+        inputImage: UIImage? = nil,
         onDismiss: (() -> Void)? = nil
     ) {
         self.progress = progress
         self.canDismiss = canDismiss
+        self.inputImage = inputImage
         self.onDismiss = onDismiss
     }
     
     var body: some View {
         ZStack {
-            // Full black background
-            Color.videoBackground
-                .ignoresSafeArea()
+            // Blurred input image background or dark fallback
+            if let image = inputImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .ignoresSafeArea()
+                    .blur(radius: 40)
+                    .overlay(Color.black.opacity(0.55).ignoresSafeArea())
+            } else {
+                Color.videoBackground
+                    .ignoresSafeArea()
+            }
             
-            VStack(spacing: VideoSpacing.xxl) {
-                // Top bar with close button (shown when can dismiss)
+            VStack(spacing: 0) {
+                // Top bar with close button
                 HStack {
                     Spacer()
                     if canDismiss, let onDismiss = onDismiss {
@@ -71,10 +65,10 @@ struct GeneratingView: View {
                             onDismiss()
                         } label: {
                             Image(systemName: "xmark")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.videoTextSecondary)
-                                .frame(width: 36, height: 36)
-                                .background(Color.videoSurface)
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.white.opacity(0.8))
+                                .frame(width: 32, height: 32)
+                                .background(.ultraThinMaterial.opacity(0.6))
                                 .clipShape(Circle())
                         }
                         .padding(.trailing, VideoSpacing.screenHorizontal)
@@ -86,73 +80,70 @@ struct GeneratingView: View {
                 
                 Spacer()
                 
-                // Animated loader - always shows the processing visual
-                animatedLoader
-                
-                // Status text
-                VStack(spacing: VideoSpacing.md) {
-                    Text(Self.statusTitles[currentTitleIndex])
-                        .font(.videoHeadline)
-                        .foregroundColor(.videoTextPrimary)
-                        .multilineTextAlignment(.center)
-                        .animation(.easeInOut(duration: 0.4), value: currentTitleIndex)
-                        .id(currentTitleIndex) // Force view replacement for clean fade transition
-                        .transition(.opacity)
-                    
-                    Text("This usually takes 4-5 minutes")
-                        .font(.videoCaption)
-                        .foregroundColor(.videoTextTertiary)
-                    
-                    // Hint that they can leave (shown when can dismiss)
-                    if canDismiss {
-                        Text("We'll notify you when your video is ready")
-                            .font(.videoCaption)
-                            .foregroundColor(.videoAccent)
-                            .multilineTextAlignment(.center)
-                            .padding(.top, VideoSpacing.sm)
-                            .transition(.opacity)
+                // Centered content
+                VStack(spacing: VideoSpacing.xl) {
+                    // Minimal animated indicator
+                    ZStack {
+                        Circle()
+                            .fill(Color.white.opacity(0.08))
+                            .frame(width: 80, height: 80)
+                            .scaleEffect(pulseScale)
+                        
+                        Image(systemName: "wand.and.sparkles")
+                            .font(.system(size: 28, weight: .medium))
+                            .foregroundColor(.white)
                     }
+                    
+                    VStack(spacing: VideoSpacing.sm) {
+                        Text(Self.statusTitles[currentTitleIndex])
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                            .id(currentTitleIndex)
+                            .transition(.opacity)
+                        
+                        Text("Usually takes 4–5 minutes")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.5))
+                    }
+                    .padding(.horizontal, VideoSpacing.xl)
                 }
-                .padding(.horizontal, VideoSpacing.xl)
-                .animation(.easeInOut(duration: 0.4), value: canDismiss)
                 
                 Spacer()
                 
-                // Continue browsing button (shown when can dismiss)
+                // Continue browsing button (pill style)
                 if canDismiss, let onDismiss = onDismiss {
-                    VStack(spacing: VideoSpacing.md) {
-                        Button {
-                            HapticManager.shared.mediumImpact()
-                            onDismiss()
-                        } label: {
-                            HStack(spacing: VideoSpacing.xs) {
-                                Image(systemName: "arrow.left")
-                                    .font(.system(size: 14, weight: .semibold))
-                                Text("Continue Browsing")
-                                    .font(.videoBody)
-                                    .fontWeight(.semibold)
-                            }
-                            .foregroundColor(.videoTextPrimary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, VideoSpacing.md)
-                            .background(Color.videoSurface)
-                            .cornerRadius(VideoSpacing.radiusMedium)
+                    Button {
+                        HapticManager.shared.mediumImpact()
+                        onDismiss()
+                    } label: {
+                        HStack(spacing: VideoSpacing.xs) {
+                            Image(systemName: "arrow.left")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text("Continue Browsing")
+                                .font(.system(size: 16, weight: .semibold))
                         }
-                        .padding(.horizontal, VideoSpacing.screenHorizontal)
-                        
-                        Text("Check progress in My Videos tab")
-                            .font(.videoCaptionSmall)
-                            .foregroundColor(.videoTextTertiary)
+                        .foregroundColor(Color(.darkGray))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 15)
+                        .background(Color.white.opacity(0.92))
+                        .clipShape(Capsule())
                     }
+                    .buttonStyle(ScaleButtonStyle())
+                    .padding(.horizontal, VideoSpacing.screenHorizontal)
                     .padding(.bottom, VideoSpacing.xxl)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                 } else {
                     Spacer()
+                        .frame(height: VideoSpacing.xxl)
                 }
             }
         }
+        .animation(.easeInOut(duration: 0.4), value: canDismiss)
         .onAppear {
-            startAnimations()
+            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                pulseScale = 1.15
+            }
             startTitleRotation()
         }
         .onDisappear {
@@ -161,61 +152,16 @@ struct GeneratingView: View {
         }
     }
     
-    // MARK: - Animated Loader
-    // Always shows the "processing" visual (wand icon) regardless of actual progress state.
-    // This avoids the jarring flash of upload/submit icons during the first few seconds.
-    
-    private var animatedLoader: some View {
-        ZStack {
-            // Outer ring
-            Circle()
-                .stroke(
-                    LinearGradient.videoProcessingGradient,
-                    lineWidth: 4
-                )
-                .frame(width: 100, height: 100)
-                .rotationEffect(.degrees(rotation))
-            
-            // Inner pulsing circle
-            Circle()
-                .fill(Color.videoAccent.opacity(0.2))
-                .frame(width: 60, height: 60)
-                .scaleEffect(scale)
-            
-            // Always show the wand icon for a consistent processing look
-            Image(systemName: "wand.and.sparkles")
-                .font(.system(size: 30))
-                .foregroundColor(.videoAccent)
-        }
-    }
-    
-    // MARK: - Animations
-    
-    private func startAnimations() {
-        // Rotation animation
-        withAnimation(.linear(duration: 3).repeatForever(autoreverses: false)) {
-            rotation = 360
-        }
-        
-        // Pulse animation
-        withAnimation(.easeInOut(duration: 1).repeatForever(autoreverses: true)) {
-            scale = 1.2
-        }
-    }
-    
     // MARK: - Title Rotation
     
-    /// Schedules the next title change after a random interval (20-35 seconds).
-    /// Stops scheduling once we reach the last title (it stays indefinitely).
     private func startTitleRotation() {
         scheduleNextTitleChange()
     }
     
     private func scheduleNextTitleChange() {
-        // If we're already at the last title, don't schedule another change
         guard currentTitleIndex < Self.statusTitles.count - 1 else { return }
         
-        let delay = Double.random(in: 20...35)
+        let delay = Double.random(in: 25...40)
         
         titleTimer?.invalidate()
         titleTimer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { _ in
@@ -227,7 +173,6 @@ struct GeneratingView: View {
                     currentTitleIndex = nextIndex
                 }
                 
-                // Schedule the next change (will stop at the last title)
                 scheduleNextTitleChange()
             }
         }
@@ -240,22 +185,16 @@ struct GeneratingView: View {
     GeneratingView(
         progress: .processing(eta: 60),
         canDismiss: true,
+        inputImage: nil,
         onDismiss: {}
     )
 }
 
-#Preview("Uploading - Shows Processing Visual") {
+#Preview("Uploading") {
     GeneratingView(
         progress: .uploading,
         canDismiss: false,
+        inputImage: nil,
         onDismiss: nil
-    )
-}
-
-#Preview("Submitting - Shows Processing Visual") {
-    GeneratingView(
-        progress: .submitting,
-        canDismiss: false,
-        onDismiss: {}
     )
 }

@@ -187,55 +187,53 @@ struct HistoryDetailView: View {
     // MARK: - Action Buttons
     
     private var actionButtons: some View {
-        HStack(spacing: VideoSpacing.md) {
-            // Save button - primary accent style
+        HStack(spacing: VideoSpacing.sm) {
             Button {
                 saveToPhotos()
             } label: {
                 HStack(spacing: VideoSpacing.xs) {
                     if isSaving {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .videoBlack))
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color(.darkGray)))
                             .frame(height: 20)
                     } else {
                         Image(systemName: "square.and.arrow.down")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 16, weight: .semibold))
                     }
                     Text("Save")
                         .font(.videoBody)
                         .fontWeight(.semibold)
                 }
-                .foregroundColor(.videoBlack)
+                .foregroundColor(Color(.darkGray))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, VideoSpacing.md)
-                .background(Color.videoAccent)
-                .cornerRadius(VideoSpacing.radiusMedium)
+                .background(Color.white.opacity(0.92))
+                .clipShape(Capsule())
             }
             .disabled(isSaving || isSharing)
             .buttonStyle(ScaleButtonStyle())
             
-            // Share button - primary accent style
             Button {
                 shareVideo()
             } label: {
                 HStack(spacing: VideoSpacing.xs) {
                     if isSharing {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .videoBlack))
+                            .progressViewStyle(CircularProgressViewStyle(tint: Color(.darkGray)))
                             .frame(height: 20)
                     } else {
                         Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 18, weight: .semibold))
+                            .font(.system(size: 16, weight: .semibold))
                     }
                     Text("Share")
                         .font(.videoBody)
                         .fontWeight(.semibold)
                 }
-                .foregroundColor(.videoBlack)
+                .foregroundColor(Color(.darkGray))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, VideoSpacing.md)
-                .background(Color.videoAccent)
-                .cornerRadius(VideoSpacing.radiusMedium)
+                .background(Color(.systemGray5))
+                .clipShape(Capsule())
             }
             .disabled(isSaving || isSharing)
             .buttonStyle(ScaleButtonStyle())

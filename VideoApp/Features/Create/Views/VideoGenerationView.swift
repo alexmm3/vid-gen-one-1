@@ -145,12 +145,10 @@ struct VideoGenerationView: View {
             GeneratingView(
                 progress: generationViewModel.progress,
                 canDismiss: generationViewModel.generationSubmitted,
+                inputImage: photoViewModel.selectedPhoto,
                 onDismiss: {
-                    // Dismiss the generating view - polling continues in background
                     generationViewModel.dismissGeneratingView()
-                    // Navigate to My Videos so user can see progress
                     appState.navigateToTab(.myVideos)
-                    // Dismiss this view to go back
                     dismiss()
                 }
             )
@@ -426,6 +424,8 @@ struct FullScreenVideoView: View {
     
     @Environment(\.dismiss) private var dismiss
     @State private var isMuted = false
+    @State private var isPlaying = true
+    @State private var showPlayPauseIndicator = false
     
     // Swipe-to-dismiss state
     @State private var dragOffset: CGSize = .zero
@@ -436,21 +436,40 @@ struct FullScreenVideoView: View {
     
     var body: some View {
         let dragProgress = min(max(dragOffset.height / dismissThreshold, 0), 1)
-        let scale = 1.0 - (dragProgress * 0.15) // Scale down to 0.85 at threshold
-        let opacity = 1.0 - (dragProgress * 0.5)  // Fade background
+        let scale = 1.0 - (dragProgress * 0.15)
+        let opacity = 1.0 - (dragProgress * 0.5)
         
         ZStack {
             Color.black.opacity(opacity).ignoresSafeArea()
             
-            // Full screen video player - use resizeAspect to show full video without cropping
-            LoopingRemoteVideoPlayer(url: videoUrl, isMuted: isMuted, videoGravity: .resizeAspect, startTime: startTime)
+            LoopingRemoteVideoPlayer(url: videoUrl, isMuted: isMuted, isPlaying: isPlaying, videoGravity: .resizeAspect, startTime: startTime)
                 .ignoresSafeArea()
                 .scaleEffect(scale)
                 .offset(y: max(dragOffset.height, 0))
+                .onTapGesture {
+                    isPlaying.toggle()
+                    HapticManager.shared.lightImpact()
+                    showPlayPauseIndicator = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            showPlayPauseIndicator = false
+                        }
+                    }
+                }
             
-            // Controls overlay
+            // Play/pause indicator
+            if showPlayPauseIndicator {
+                Image(systemName: isPlaying ? "play.fill" : "pause.fill")
+                    .font(.system(size: 50, weight: .medium))
+                    .foregroundColor(.white.opacity(0.9))
+                    .frame(width: 90, height: 90)
+                    .background(.ultraThinMaterial.opacity(0.6))
+                    .clipShape(Circle())
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            }
+            
+            // Close button only
             VStack {
-                // Top bar with close button
                 HStack {
                     Button {
                         HapticManager.shared.selection()
@@ -470,35 +489,14 @@ struct FullScreenVideoView: View {
                 .padding(.top, 60)
                 
                 Spacer()
-                
-                // Bottom bar with title and mute button
-                HStack(alignment: .bottom) {
-                    Text(title)
-                        .font(.videoHeadline)
-                        .foregroundColor(.white)
-                    
-                    Spacer()
-                    
-                    // Mute button
-                    VideoMuteButton(isMuted: $isMuted)
-                }
-                .padding(.horizontal, VideoSpacing.screenHorizontal)
-                .padding(.bottom, 50)
-                .background(
-                    LinearGradient(
-                        colors: [.clear, .black.opacity(0.6)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
             }
-            .opacity(1.0 - dragProgress) // Fade controls while dragging
+            .opacity(1.0 - dragProgress)
             .offset(y: max(dragOffset.height, 0))
         }
+        .animation(.easeInOut(duration: 0.2), value: showPlayPauseIndicator)
         .gesture(
             DragGesture()
                 .onChanged { value in
-                    // Only track downward drags
                     if value.translation.height > 0 {
                         isDragging = true
                         dragOffset = value.translation
@@ -517,7 +515,6 @@ struct FullScreenVideoView: View {
                 }
         )
         .onAppear {
-            // Inherit mute state from the presenting view
             isMuted = initialMuted
         }
     }

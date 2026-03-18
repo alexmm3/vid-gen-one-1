@@ -97,12 +97,13 @@ final class VideoPlayerCoordinator {
 struct LoopingRemoteVideoPlayer: View {
     let url: URL?
     var isMuted: Bool = true
+    var isPlaying: Bool = true
     var videoGravity: AVLayerVideoGravity = .resizeAspectFill
     /// Optional time to seek to after player setup (for seamless fullscreen transitions)
     var startTime: CMTime?
     
     var body: some View {
-        LoopingRemoteVideoPlayerContent(url: url, isMuted: isMuted, videoGravity: videoGravity, startTime: startTime)
+        LoopingRemoteVideoPlayerContent(url: url, isMuted: isMuted, isPlaying: isPlaying, videoGravity: videoGravity, startTime: startTime)
             .id(url?.absoluteString ?? "nil_url")
     }
 }
@@ -110,6 +111,7 @@ struct LoopingRemoteVideoPlayer: View {
 private struct LoopingRemoteVideoPlayerContent: View {
     let url: URL?
     var isMuted: Bool = true
+    var isPlaying: Bool = true
     var videoGravity: AVLayerVideoGravity = .resizeAspectFill
     var startTime: CMTime?
     
@@ -122,7 +124,7 @@ private struct LoopingRemoteVideoPlayerContent: View {
         Group {
             if let url = url {
                 if isVisible {
-                    RemoteVideoLooperView(url: url, isMuted: isMuted, videoGravity: videoGravity, startTime: startTime)
+                    RemoteVideoLooperView(url: url, isMuted: isMuted, isPlaying: isPlaying, videoGravity: videoGravity, startTime: startTime)
                 } else {
                     Color.clear
                 }
@@ -141,6 +143,7 @@ private struct LoopingRemoteVideoPlayerContent: View {
 private struct RemoteVideoLooperView: UIViewRepresentable {
     let url: URL
     var isMuted: Bool
+    var isPlaying: Bool = true
     var videoGravity: AVLayerVideoGravity
     var startTime: CMTime?
     
@@ -151,8 +154,12 @@ private struct RemoteVideoLooperView: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: RemoteLoopingVideoUIView, context: Context) {
-        // CRITICAL: Reconfigure with new URL when it changes (fixes video reuse bug)
         uiView.configure(with: url, isMuted: isMuted, videoGravity: videoGravity)
+        if isPlaying {
+            uiView.resumePlayback()
+        } else {
+            uiView.pausePlayback()
+        }
     }
 }
 
@@ -304,6 +311,15 @@ private class RemoteLoopingVideoUIView: UIView {
     
     func setMuted(_ muted: Bool) {
         player?.isMuted = muted
+    }
+    
+    func pausePlayback() {
+        player?.pause()
+    }
+    
+    func resumePlayback() {
+        guard shouldBePlaying, window != nil else { return }
+        player?.play()
     }
     
     override func layoutSubviews() {

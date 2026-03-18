@@ -147,6 +147,7 @@ struct EffectGenerationView: View {
             GeneratingView(
                 progress: generationViewModel.progress,
                 canDismiss: generationViewModel.generationSubmitted,
+                inputImage: primaryPhoto,
                 onDismiss: {
                     generationViewModel.dismissGeneratingView()
                     appState.navigateToTab(.myVideos)
