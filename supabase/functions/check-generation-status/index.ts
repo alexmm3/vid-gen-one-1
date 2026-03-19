@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Logger } from "../_shared/logger.ts";
+import { classifyGrokPollHttpFailure } from "../_shared/grok-polling.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,6 +34,20 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const grokApiKey = Deno.env.get("GROK_API_KEY");
     const supabase = createClient(supabaseUrl, supabaseKey);
+    let grokTimeoutMinutes = 10;
+
+    const { data: grokCfg } = await supabase
+      .from("provider_config")
+      .select("config")
+      .eq("provider", "grok")
+      .maybeSingle();
+
+    if (grokCfg?.config) {
+      const cfg = grokCfg.config as Record<string, unknown>;
+      if (typeof cfg.poll_timeout_minutes === "number") {
+        grokTimeoutMinutes = cfg.poll_timeout_minutes;
+      }
+    }
 
     const url = new URL(req.url);
     const generationId = url.searchParams.get("generation_id");
@@ -176,7 +191,46 @@ serve(async (req) => {
         }
       } else {
         const errText = await pollRes.text();
+        const ageMinutes = (Date.now() - new Date(generation.created_at).getTime()) / 60000;
+        const failureReason = classifyGrokPollHttpFailure({
+          statusCode: pollRes.status,
+          ageMinutes,
+          timeoutMinutes: grokTimeoutMinutes,
+        });
         logger.warn('grok.poll_http_error', { metadata: { status: pollRes.status, body: errText.substring(0, 200) } });
+
+        if (failureReason) {
+          const currentErrorLog = Array.isArray(generation.error_log) ? generation.error_log : [];
+          const updateData = {
+            status: "failed",
+            error_message: failureReason,
+            poll_count: (generation.poll_count || 0) + 1,
+            last_polled_at: new Date().toISOString(),
+            last_error_at: new Date().toISOString(),
+            error_log: [...currentErrorLog, ...logger.getLogs()],
+          };
+
+          await supabase.from("generations").update(updateData).eq("id", generation.id);
+
+          await supabase.from("failed_generations").insert({
+            original_generation_id: generation.id,
+            device_id: generation.device_id,
+            failure_reason: failureReason,
+            final_error_message: failureReason,
+            error_log: [...currentErrorLog, ...logger.getLogs()],
+            retry_count: generation.retry_count || 0,
+          });
+
+          if (generation.pipeline_execution_id) {
+            await supabase.from("pipeline_executions").update({
+              status: "failed",
+              error_message: failureReason,
+              completed_at: new Date().toISOString(),
+            }).eq("id", generation.pipeline_execution_id);
+          }
+
+          Object.assign(generation, updateData);
+        }
       }
     }
 

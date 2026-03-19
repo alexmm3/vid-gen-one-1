@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Logger } from "../_shared/logger.ts";
+import { classifyGrokPollHttpFailure } from "../_shared/grok-polling.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -125,7 +126,20 @@ serve(async (req) => {
 
         if (!pollRes.ok) {
           const errText = await pollRes.text();
+          const ageMinutes = (Date.now() - new Date(gen.created_at).getTime()) / 60000;
+          const failureReason = classifyGrokPollHttpFailure({
+            statusCode: pollRes.status,
+            ageMinutes,
+            timeoutMinutes: grokTimeoutMinutes,
+          });
           genLogger.warn('grok.poll_http_error', { metadata: { status: pollRes.status, body: errText.substring(0, 200) } });
+
+          if (failureReason) {
+            await markAsFailed(supabase, gen, failureReason, genLogger);
+            results.push({ generation_id: gen.id, previous_status: "processing", new_status: "failed", success: false, error: failureReason });
+            continue;
+          }
+
           results.push({ generation_id: gen.id, previous_status: "processing", new_status: "processing", success: false, error: `HTTP ${pollRes.status}` });
           await supabase.from("generations").update({
             poll_count: gen.poll_count + 1,
