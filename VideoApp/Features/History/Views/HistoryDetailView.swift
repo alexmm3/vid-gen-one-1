@@ -92,9 +92,9 @@ struct HistoryDetailView: View {
                 .ignoresSafeArea()
             
             // 2. Movable content strictly bound to screen size.
-            // The hard screen-sized frame is important: without it, the video /
-            // thumbnail layer can report a larger natural width and push the
-            // controls off-screen, especially on taller phones.
+            // The hard screen-sized frame is important: without it, the video
+            // layer can report a larger natural width and push the controls
+            // off-screen, especially on taller phones.
             ZStack {
                 // Video + background fill the screen
                 Color.black
@@ -196,23 +196,13 @@ struct HistoryDetailView: View {
     private var videoPlayerContent: some View {
         Group {
             if let url = generation.fullOutputUrl {
-                ZStack {
-                    // Match the fullscreen player with .fit too, otherwise the
-                    // placeholder thumbnail can appear more zoomed than the video
-                    // during the first moments of the transition.
-                    VideoThumbnailView(thumbnailUrl: nil, videoUrl: url, contentMode: .fit)
-                        .frame(width: screenWidth, height: screenHeight)
-                        .clipped()
-                    
-                    RemoteVideoPlayer(
-                        url: url,
-                        isPlaying: isPlaying,
-                        isMuted: isMuted,
-                        videoGravity: .resizeAspect,
-                        timeProvider: timeProvider
-                    )
-                    .frame(width: screenWidth, height: screenHeight)
-                }
+                RemoteVideoPlayer(
+                    url: url,
+                    isPlaying: isPlaying,
+                    isMuted: isMuted,
+                    videoGravity: .resizeAspect,
+                    timeProvider: timeProvider
+                )
                 .frame(width: screenWidth, height: screenHeight)
             } else {
                 VStack(spacing: VideoSpacing.sm) {
@@ -381,22 +371,35 @@ struct HistoryDetailView: View {
             scheduleAutoHide()
             action()
         } label: {
-            Group {
+            ZStack {
+                Circle()
+                    .fill(.ultraThinMaterial)
+
                 if isLoading {
-                    ProgressView().progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
                 } else {
                     Image(systemName: icon)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(tint ?? .white)
+                        .offset(y: iconOpticalOffset(for: icon))
                 }
             }
             .frame(width: 44, height: 44)
-            .background(.ultraThinMaterial)
-            .clipShape(Circle())
             .opacity(isEnabled ? 1 : 0.4)
         }
         .disabled(isLoading || !isEnabled)
         .buttonStyle(.plain)
+    }
+
+    private func iconOpticalOffset(for icon: String) -> CGFloat {
+        switch icon {
+        case "square.and.arrow.down", "square.and.arrow.up":
+            // These SF Symbols read slightly top-heavy inside circular buttons.
+            return 1
+        default:
+            return 0
+        }
     }
     
     // MARK: - Controls Visibility

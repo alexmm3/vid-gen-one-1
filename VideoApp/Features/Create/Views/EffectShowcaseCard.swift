@@ -48,10 +48,7 @@ struct EffectShowcaseCard: View {
 
     private var videoLayer: some View {
         ZStack {
-            VideoThumbnailView(
-                thumbnailUrl: effect.fullThumbnailUrl,
-                videoUrl: effect.fullPreviewUrl
-            )
+            Color.videoSurface
 
             if showVideoPlayer {
                 LoopingRemoteVideoPlayer(url: effect.fullPreviewUrl)

@@ -256,23 +256,10 @@ struct RootView: View {
             isInitialized = true
         }
         
-        // Pre-fetch templates in background (non-blocking)
+        // Pre-fetch templates in background (non-blocking).
         // CategoryService has caching, so this will speed up CreateView's first load.
-        // Also prefetch lightweight thumbnails (small JPEGs) so they are cached
-        // before the user reaches the Create screen. We intentionally do NOT
-        // prefetch full video files here — that would compete with AVPlayer
-        // streaming and cause memory pressure / buffer purges.
         Task.detached(priority: .background) {
             await CategoryService.shared.fetchAll()
-            
-            // Prefetch only thumbnails (small JPEGs, ~5-20 KB each)
-            let allTemplates = await CategoryService.shared.templatesByCategory.values.flatMap { $0 }
-            let thumbnailURLs = allTemplates.compactMap { $0.fullThumbnailUrl }
-            
-            if !thumbnailURLs.isEmpty {
-                ImageCacheManager.shared.prefetch(urls: thumbnailURLs)
-                print("🖼️ Prefetching \(thumbnailURLs.count) template thumbnails")
-            }
         }
     }
 }

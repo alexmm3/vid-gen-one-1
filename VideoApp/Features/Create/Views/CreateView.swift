@@ -158,10 +158,6 @@ struct CreateView: View {
               let idx = viewModel.allEffects.firstIndex(where: { $0.id == id }) else { return }
 
         let effects = viewModel.allEffects
-        let thumbRange = max(0, idx - 2)...min(effects.count - 1, idx + 2)
-        let thumbUrls = thumbRange.compactMap { effects[$0].fullThumbnailUrl }
-        ImageCacheManager.shared.prefetch(urls: thumbUrls)
-
         let videoRange = max(0, idx - 1)...min(effects.count - 1, idx + 1)
         let videoUrls = videoRange.compactMap { effects[$0].fullPreviewUrl }
         VideoCacheManager.shared.prefetch(urls: videoUrls)

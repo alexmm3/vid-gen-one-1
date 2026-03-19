@@ -66,12 +66,6 @@ struct CategorySection: View {
             onSelect(template)
         } label: {
             ZStack(alignment: .bottom) {
-                // Cached thumbnail underlay — renders instantly from image cache
-                // and prevents a blank flash when the video player is recreated
-                VideoThumbnailView(thumbnailUrl: template.fullThumbnailUrl, videoUrl: template.fullPreviewUrl)
-                    .frame(width: 140, height: 200)
-                    .clipped()
-                
                 // Looping video player — uses lightweight preview URL for cards.
                 // The full video (template.videoUrl) is used for AI generation and
                 // full-screen playback only — NEVER preview_url.
@@ -159,9 +153,6 @@ struct EffectCategorySection: View {
             onSelect(effect)
         } label: {
             ZStack(alignment: .bottom) {
-                VideoThumbnailView(thumbnailUrl: effect.fullThumbnailUrl, videoUrl: effect.fullPreviewUrl)
-                    .frame(width: 140, height: 200)
-                    .clipped()
                 LoopingRemoteVideoPlayer(url: effect.fullPreviewUrl)
                     .frame(width: 140, height: 200)
                 Text(effect.name)
@@ -278,12 +269,7 @@ struct UserVideosSection: View {
             onSelect(video)
         } label: {
             ZStack(alignment: .bottom) {
-                // Video player with cached thumbnail underlay
                 if let url = video.effectiveVideoUrl {
-                    VideoThumbnailView(thumbnailUrl: nil, videoUrl: url)
-                        .frame(width: 140, height: 200)
-                        .clipped()
-                    
                     LoopingRemoteVideoPlayer(url: url)
                         .frame(width: 140, height: 200)
                 } else {

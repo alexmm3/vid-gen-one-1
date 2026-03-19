@@ -105,180 +105,20 @@ extension CachedAsyncImage where Content == Image, Placeholder == Color {
     }
 }
 
-// MARK: - Video Thumbnail View
-
-/// View that displays video thumbnail with caching
-/// Falls back to video first frame if no thumbnail URL provided
-struct VideoThumbnailView: View {
-    let thumbnailUrl: URL?
-    let videoUrl: URL?
-    var contentMode: ContentMode = .fill
-    
-    var body: some View {
-        VideoThumbnailContentView(thumbnailUrl: thumbnailUrl, videoUrl: videoUrl, contentMode: contentMode)
-            .id(thumbnailUrl?.absoluteString ?? videoUrl?.absoluteString ?? "nil_url")
-    }
-}
-
-private struct VideoThumbnailContentView: View {
-    let thumbnailUrl: URL?
-    let videoUrl: URL?
-    let contentMode: ContentMode
-    
-    @State private var thumbnail: UIImage?
-    @State private var isLoading = false
-    
-    init(thumbnailUrl: URL?, videoUrl: URL?, contentMode: ContentMode) {
-        self.thumbnailUrl = thumbnailUrl
-        self.videoUrl = videoUrl
-        self.contentMode = contentMode
-        
-        // Try to load synchronously from memory cache to avoid flashes during scroll
-        if let url = thumbnailUrl, let cached = ImageCacheManager.shared.getMemoryCachedImage(for: url) {
-            _thumbnail = State(initialValue: cached)
-        } else if let url = videoUrl {
-            let thumbnailKey = URL(string: url.absoluteString + "_thumb")!
-            if let cached = ImageCacheManager.shared.getMemoryCachedImage(for: thumbnailKey) {
-                _thumbnail = State(initialValue: cached)
-            }
-        }
-    }
-    
-    var body: some View {
-        Group {
-            if let thumbnail = thumbnail {
-                Image(uiImage: thumbnail)
-                    .resizable()
-                    .aspectRatio(contentMode: contentMode)
-            } else {
-                // Loading placeholder
-                Color.videoSurface
-                    .overlay(
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .videoTextTertiary))
-                    )
-            }
-        }
-        .onAppear {
-            loadThumbnail()
-        }
-        .onChange(of: thumbnailUrl) { _, _ in
-            reload()
-        }
-        .onChange(of: videoUrl) { _, _ in
-            reload()
-        }
-    }
-    
-    private func reload() {
-        if let url = thumbnailUrl, let cached = ImageCacheManager.shared.getMemoryCachedImage(for: url) {
-            thumbnail = cached
-            isLoading = false
-            return
-        }
-        if let url = videoUrl {
-            let thumbnailKey = URL(string: url.absoluteString + "_thumb")!
-            if let cached = ImageCacheManager.shared.getMemoryCachedImage(for: thumbnailKey) {
-                thumbnail = cached
-                isLoading = false
-                return
-            }
-        }
-        thumbnail = nil
-        isLoading = false
-        loadThumbnail()
-    }
-    
-    private func loadThumbnail() {
-        guard !isLoading, thumbnail == nil else { return }
-        isLoading = true
-        
-        Task {
-            // First try thumbnail URL
-            if let url = thumbnailUrl {
-                if let image = await ImageCacheManager.shared.loadImage(from: url) {
-                    await MainActor.run {
-                        self.thumbnail = image
-                        self.isLoading = false
-                    }
-                    return
-                }
-            }
-            
-            // Fall back to extracting from video
-            if let url = videoUrl {
-                let image = await extractVideoThumbnail(from: url)
-                await MainActor.run {
-                    self.thumbnail = image
-                    self.isLoading = false
-                }
-            } else {
-                await MainActor.run {
-                    self.isLoading = false
-                }
-            }
-        }
-    }
-    
-    private func extractVideoThumbnail(from url: URL) async -> UIImage? {
-        // Check if we have a cached thumbnail for this video URL
-        let thumbnailKey = URL(string: url.absoluteString + "_thumb")!
-        if let cached = await ImageCacheManager.shared.loadImage(from: thumbnailKey) {
-            return cached
-        }
-        
-        // Extract thumbnail from video on a background thread.
-        // copyCGImage(at:actualTime:) is synchronous and would block
-        // the main thread if run in a MainActor-inherited Task.
-        let thumbnail: UIImage? = await Task.detached(priority: .utility) {
-            let asset = AVAsset(url: url)
-            let imageGenerator = AVAssetImageGenerator(asset: asset)
-            imageGenerator.appliesPreferredTrackTransform = true
-            imageGenerator.maximumSize = CGSize(width: 400, height: 400)
-            
-            do {
-                let cgImage = try imageGenerator.copyCGImage(at: .zero, actualTime: nil)
-                return UIImage(cgImage: cgImage)
-            } catch {
-                print("🖼️ Failed to extract video thumbnail: \(error.localizedDescription)")
-                return nil
-            }
-        }.value
-        
-        // Cache the extracted thumbnail (back on caller's context)
-        if let thumbnail = thumbnail {
-            ImageCacheManager.shared.cacheImage(thumbnail, for: thumbnailKey)
-        }
-        
-        return thumbnail
-    }
-}
-
-import AVFoundation
-
 // MARK: - Preview
 
 #Preview {
-    VStack(spacing: 20) {
-        CachedAsyncImage(
-            url: URL(string: "https://via.placeholder.com/300")
-        ) { image in
-            image
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-        } placeholder: {
-            Color.gray
-        }
-        .frame(width: 150, height: 200)
-        .cornerRadius(12)
-        
-        VideoThumbnailView(
-            thumbnailUrl: nil,
-            videoUrl: URL(string: "https://example.com/video.mp4")
-        )
-        .frame(width: 150, height: 200)
-        .cornerRadius(12)
+    CachedAsyncImage(
+        url: URL(string: "https://via.placeholder.com/300")
+    ) { image in
+        image
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+    } placeholder: {
+        Color.gray
     }
+    .frame(width: 150, height: 200)
+    .cornerRadius(12)
     .padding()
     .background(Color.videoBackground)
 }

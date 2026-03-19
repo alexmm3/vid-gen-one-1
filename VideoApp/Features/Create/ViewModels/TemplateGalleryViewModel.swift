@@ -39,34 +39,11 @@ final class TemplateGalleryViewModel: ObservableObject {
     func loadTemplates() async {
         await templateService.fetchTemplates()
         Analytics.track(.templateGalleryViewed)
-        
-        // Prefetch thumbnails for loaded templates
-        prefetchThumbnails()
     }
     
     /// Refresh templates
     func refresh() async {
         await templateService.refresh()
-        
-        // Prefetch thumbnails after refresh
-        prefetchThumbnails()
-    }
-    
-    /// Prefetch thumbnails for better scrolling performance
-    private func prefetchThumbnails() {
-        // Collect thumbnail URLs (prefer thumbnail, fallback to video URL for extraction)
-        let thumbnailUrls = templates.compactMap { template -> URL? in
-            if let thumbnailUrl = template.fullThumbnailUrl {
-                return thumbnailUrl
-            }
-            return nil
-        }
-        
-        // Prefetch thumbnails in background
-        if !thumbnailUrls.isEmpty {
-            ImageCacheManager.shared.prefetch(urls: thumbnailUrls)
-            print("📦 Prefetching \(thumbnailUrls.count) template thumbnails")
-        }
     }
     
     /// Handle template selection

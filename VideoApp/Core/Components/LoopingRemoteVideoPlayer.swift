@@ -116,8 +116,8 @@ private struct LoopingRemoteVideoPlayerContent: View {
     var startTime: CMTime?
     
     /// Tracks whether this view is currently on-screen.
-    /// When false the AVPlayer is torn down to free resources; the transparent
-    /// placeholder lets the cached thumbnail underneath remain visible.
+    /// When false the AVPlayer is torn down to free resources and the view falls
+    /// back to a lightweight solid placeholder instead of a separate thumbnail layer.
     @State private var isVisible = false
     
     var body: some View {
@@ -126,7 +126,7 @@ private struct LoopingRemoteVideoPlayerContent: View {
                 if isVisible {
                     RemoteVideoLooperView(url: url, isMuted: isMuted, isPlaying: isPlaying, videoGravity: videoGravity, startTime: startTime)
                 } else {
-                    Color.clear
+                    Color.videoSurface
                 }
             } else {
                 Rectangle()
@@ -182,11 +182,9 @@ private class RemoteLoopingVideoUIView: UIView {
     
     override init(frame: CGRect) {
         super.init(frame: frame)
-        // TRANSPARENT so the VideoThumbnailView underneath (in the ZStack)
-        // remains visible while the player is buffering / re-buffering.
-        // This prevents the "black flash" when iOS purges player buffers
-        // (e.g. after background→foreground or many concurrent players).
-        backgroundColor = .clear
+        // Use a stable solid background while AVPlayer is buffering so the UI
+        // no longer depends on a separate thumbnail underlay.
+        backgroundColor = .black
         clipsToBounds = true
         addLifecycleObservers()
     }
