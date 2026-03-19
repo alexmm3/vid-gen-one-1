@@ -17,7 +17,6 @@ struct CreateView: View {
     @State private var showEffectGenerationView = false
     @State private var centeredEffectID: UUID?
     @State private var swipeDirection: SwipeDirection = .forward
-    @State private var ambientColors: [Color] = [.clear, .clear, .clear]
 
     private enum SwipeDirection {
         case forward, backward
@@ -67,7 +66,7 @@ struct CreateView: View {
                 swipeDirection = newIdx > oldIdx ? .forward : .backward
             }
             HapticManager.shared.selection()
-            updateAmbientColor()
+            prefetchNearbyAssets()
         }
     }
 
@@ -92,7 +91,7 @@ struct CreateView: View {
                         ambientGlow(cardWidth: cardWidth, cardHeight: cardHeight)
                         
                         ScrollView(.horizontal, showsIndicators: false) {
-                            LazyHStack(spacing: VideoSpacing.sm) {
+                            HStack(spacing: VideoSpacing.sm) {
                                 ForEach(viewModel.allEffects) { effect in
                                     EffectShowcaseCard(
                                         effect: effect,
@@ -122,7 +121,6 @@ struct CreateView: View {
                             if centeredEffectID == nil {
                                 centeredEffectID = viewModel.allEffects.first?.id
                             }
-                            updateAmbientColor()
                         }
                     }
 
@@ -134,59 +132,39 @@ struct CreateView: View {
 
     // MARK: - Ambient Glow
 
+    @ViewBuilder
     private func ambientGlow(cardWidth: CGFloat, cardHeight: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: VideoSpacing.radiusXLarge)
-            .fill(
-                LinearGradient(
-                    colors: ambientColors,
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .frame(width: cardWidth, height: cardHeight)
-            // Scale up so it bleeds outside the card
-            .scaleEffect(x: 1.15, y: 1.1)
-            // Massive blur to make it a soft aura
-            .blur(radius: 60)
-            // Subtle opacity
-            .opacity(0.4)
-            .allowsHitTesting(false)
+        if let effect = centeredEffect {
+            let hex = effect.displayThemeColor
+            RoundedRectangle(cornerRadius: VideoSpacing.radiusXLarge)
+                .fill(Color(hex: hex))
+                .frame(width: cardWidth, height: cardHeight)
+                // Scale up so it bleeds outside the card
+                .scaleEffect(x: 1.15, y: 1.1)
+                // Massive blur to make it a soft aura
+                .blur(radius: 80)
+                // Subtle opacity
+                .opacity(0.15)
+                .allowsHitTesting(false)
+                .animation(.easeInOut(duration: 0.6), value: hex)
+        } else {
+            Color.clear
+                .frame(width: cardWidth, height: cardHeight)
+        }
     }
 
-    private func updateAmbientColor() {
-        guard let effect = centeredEffect,
-              let url = effect.fullThumbnailUrl else {
-            return
-        }
-        
-        Task {
-            let imageToProcess: UIImage?
-            if let cached = ImageCacheManager.shared.getMemoryCachedImage(for: url) {
-                imageToProcess = cached
-            } else {
-                imageToProcess = await ImageCacheManager.shared.loadImage(from: url)
-            }
-            
-            guard let image = imageToProcess else { return }
-            
-            // Compute colors in background to avoid dropping frames during scroll
-            let newColors: [Color]
-            if let vertical = image.verticalColors, vertical.count == 3 {
-                newColors = vertical.map { Color($0) }
-            } else {
-                let dominant = image.dominantColor ?? .gray
-                newColors = [Color(dominant), Color(dominant), Color(dominant)]
-            }
-            
-            // Ensure we are still on the same effect before applying
-            if self.centeredEffectID == effect.id {
-                await MainActor.run {
-                    withAnimation(.easeInOut(duration: 0.8)) {
-                        self.ambientColors = newColors
-                    }
-                }
-            }
-        }
+    private func prefetchNearbyAssets() {
+        guard let id = centeredEffectID,
+              let idx = viewModel.allEffects.firstIndex(where: { $0.id == id }) else { return }
+
+        let effects = viewModel.allEffects
+        let thumbRange = max(0, idx - 2)...min(effects.count - 1, idx + 2)
+        let thumbUrls = thumbRange.compactMap { effects[$0].fullThumbnailUrl }
+        ImageCacheManager.shared.prefetch(urls: thumbUrls)
+
+        let videoRange = max(0, idx - 1)...min(effects.count - 1, idx + 1)
+        let videoUrls = videoRange.compactMap { effects[$0].fullPreviewUrl }
+        VideoCacheManager.shared.prefetch(urls: videoUrls)
     }
 
     // MARK: - Animated Effect Title

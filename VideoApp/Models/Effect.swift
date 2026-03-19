@@ -23,10 +23,11 @@ struct Effect: Identifiable, Codable, Equatable {
     let systemPromptTemplate: String?
     let provider: String?
     let generationParams: EffectGenerationParams?
+    let themeColor: String?
     let createdAt: Date?
     let updatedAt: Date?
 
-    init(id: UUID, name: String, description: String?, previewVideoUrl: String?, thumbnailUrl: String?, sampleInputImageUrl: String? = nil, categoryId: UUID?, isActive: Bool, isPremium: Bool, sortOrder: Int, requiresSecondaryPhoto: Bool, systemPromptTemplate: String?, provider: String?, generationParams: EffectGenerationParams?, createdAt: Date?, updatedAt: Date?) {
+    init(id: UUID, name: String, description: String?, previewVideoUrl: String?, thumbnailUrl: String?, sampleInputImageUrl: String? = nil, categoryId: UUID?, isActive: Bool, isPremium: Bool, sortOrder: Int, requiresSecondaryPhoto: Bool, systemPromptTemplate: String?, provider: String?, generationParams: EffectGenerationParams?, themeColor: String?, createdAt: Date?, updatedAt: Date?) {
         self.id = id
         self.name = name
         self.description = description
@@ -41,6 +42,7 @@ struct Effect: Identifiable, Codable, Equatable {
         self.systemPromptTemplate = systemPromptTemplate
         self.provider = provider
         self.generationParams = generationParams
+        self.themeColor = themeColor
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -61,6 +63,7 @@ struct Effect: Identifiable, Codable, Equatable {
         self.systemPromptTemplate = try c.decodeIfPresent(String.self, forKey: .systemPromptTemplate)
         self.provider = try c.decodeIfPresent(String.self, forKey: .provider)
         self.generationParams = (try? c.decodeIfPresent(EffectGenerationParams.self, forKey: .generationParams)) ?? nil
+        self.themeColor = try c.decodeIfPresent(String.self, forKey: .themeColor)
         self.createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt)
         self.updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
     }
@@ -80,6 +83,7 @@ struct Effect: Identifiable, Codable, Equatable {
         case systemPromptTemplate = "system_prompt_template"
         case provider
         case generationParams = "generation_params"
+        case themeColor = "theme_color"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -100,6 +104,26 @@ struct Effect: Identifiable, Codable, Equatable {
     var fullSampleInputImageUrl: URL? {
         guard let url = sampleInputImageUrl else { return nil }
         return URL(string: url)
+    }
+
+    /// Returns the theme color from the backend, or a stable random color based on the effect's ID for testing
+    var displayThemeColor: String {
+        if let color = themeColor, !color.isEmpty {
+            return color
+        }
+        // Fallback for testing: stable random color based on ID
+        let colors = [
+            "#FF2A54", // Vibrant Pink/Red
+            "#00E5FF", // Cyan
+            "#B400FF", // Purple
+            "#FFD500", // Yellow
+            "#00FF88", // Neon Green
+            "#FF6A00", // Orange
+            "#5D00FF", // Deep Violet
+            "#FF0055"  // Magenta
+        ]
+        let index = abs(id.hashValue) % colors.count
+        return colors[index]
     }
 }
 
@@ -132,6 +156,7 @@ extension Effect {
         systemPromptTemplate: nil,
         provider: "kling",
         generationParams: nil,
+        themeColor: "#FF0055",
         createdAt: nil,
         updatedAt: nil
     )
@@ -150,6 +175,7 @@ extension Effect {
         systemPromptTemplate: nil,
         provider: "kling",
         generationParams: nil,
+        themeColor: "#00FF88",
         createdAt: nil,
         updatedAt: nil
     )

@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Logger } from "../_shared/logger.ts";
 import { classifyGrokPollHttpFailure } from "../_shared/grok-polling.ts";
+import { recoverGenerationStart } from "../_shared/start-generation.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -12,6 +13,7 @@ interface Generation {
   id: string;
   device_id: string;
   status: string;
+  request_id: string | null;
   provider: string | null;
   provider_request_id: string | null;
   api_response: Record<string, unknown> | null;
@@ -39,6 +41,12 @@ interface GrokPollResponse {
     respect_moderation?: boolean;
   };
   model?: string;
+}
+
+function getGenerationAgeMinutes(createdAt: string, requestId: string | null): number {
+  const requestTimestamp = requestId?.match(/^req_(\d+)_/)?.[1];
+  const effectiveStartedAt = requestTimestamp ? Number(requestTimestamp) : new Date(createdAt).getTime();
+  return (Date.now() - effectiveStartedAt) / 60000;
 }
 
 serve(async (req) => {
@@ -78,7 +86,7 @@ serve(async (req) => {
 
     const { data: processingGenerations, error: fetchError } = await supabase
       .from("generations")
-      .select("id, device_id, status, provider, provider_request_id, api_response, poll_count, retry_count, max_retries, error_log, created_at, pipeline_execution_id")
+      .select("id, device_id, status, request_id, provider, provider_request_id, api_response, poll_count, retry_count, max_retries, error_log, created_at, pipeline_execution_id")
       .eq("status", "processing")
       .order("created_at", { ascending: true })
       .limit(50);
@@ -109,8 +117,24 @@ serve(async (req) => {
 
       try {
         if (!gen.provider_request_id) {
+          if (!gen.request_id) {
+            genLogger.warn("generation.recovery_attempt");
+            const recoveryResult = await recoverGenerationStart(supabase, genLogger, gen.id);
+
+            if (recoveryResult) {
+              results.push({
+                generation_id: gen.id,
+                previous_status: "processing",
+                new_status: recoveryResult.status,
+                success: recoveryResult.success,
+                error: recoveryResult.error,
+              });
+              continue;
+            }
+          }
+
           genLogger.warn('grok.no_request_id');
-          const ageMinutes = (Date.now() - new Date(gen.created_at).getTime()) / 60000;
+          const ageMinutes = getGenerationAgeMinutes(gen.created_at, gen.request_id);
           if (ageMinutes > grokTimeoutMinutes) {
             await markAsFailed(supabase, gen, `No request_id after ${Math.round(ageMinutes)} min`, genLogger);
             results.push({ generation_id: gen.id, previous_status: "processing", new_status: "failed", success: false, error: "No request_id" });
@@ -126,7 +150,7 @@ serve(async (req) => {
 
         if (!pollRes.ok) {
           const errText = await pollRes.text();
-          const ageMinutes = (Date.now() - new Date(gen.created_at).getTime()) / 60000;
+          const ageMinutes = getGenerationAgeMinutes(gen.created_at, gen.request_id);
           const failureReason = classifyGrokPollHttpFailure({
             statusCode: pollRes.status,
             ageMinutes,
@@ -203,7 +227,7 @@ serve(async (req) => {
           results.push({ generation_id: gen.id, previous_status: "processing", new_status: "failed", success: false, error: "expired" });
 
         } else {
-          const ageMinutes = (Date.now() - new Date(gen.created_at).getTime()) / 60000;
+          const ageMinutes = getGenerationAgeMinutes(gen.created_at, gen.request_id);
           if (ageMinutes > grokTimeoutMinutes) {
             genLogger.warn('grok.timeout', { metadata: { age_minutes: ageMinutes } });
             await markAsFailed(supabase, gen, `Generation timed out after ${Math.round(ageMinutes)} minutes`, genLogger);

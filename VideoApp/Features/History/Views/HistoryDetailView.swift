@@ -2,9 +2,22 @@
 //  HistoryDetailView.swift
 //  AIVideo
 //
-//  Immersive fullscreen detail view for a single video.
-//  Presented via fullScreenCover with iOS 18 .zoom transition.
-//  Custom drag-to-dismiss + overlay controls.
+//  ⚠️  PROVEN IMPLEMENTATION — DO NOT REFACTOR THE PRESENTATION MECHANISM  ⚠️
+//
+//  This view is presented via .fullScreenCover + .navigationTransition(.zoom)
+//  from HistoryListView. That combination produces a flawless Photos-like hero
+//  zoom from the grid card and back. It was validated on iPhone 17 Pro / iOS 26.
+//
+//  Key contracts:
+//  • HistoryListView applies .matchedTransitionSource(id:in:) on each card
+//  • HistoryListView presents this view inside .fullScreenCover(item:)
+//  • This view applies .navigationTransition(.zoom(sourceID:in:)) via heroZoomTarget
+//  • Dismiss is triggered by @Environment(\.dismiss) — the system reverses the zoom
+//  • Custom drag-to-dismiss calls dismiss() after threshold — system handles the rest
+//
+//  DO NOT replace .fullScreenCover with ZStack overlay.
+//  DO NOT replace .navigationTransition(.zoom) with matchedGeometryEffect.
+//  DO NOT add manual hero-animation frames/positions/scales for the open transition.
 //
 
 import SwiftUI
@@ -26,6 +39,7 @@ struct HistoryDetailView: View {
     @State private var showSaveSuccess = false
     @State private var showSaveError = false
     @State private var shareFileUrl: URL?
+    @State private var saveSuccessHideTask: Task<Void, Never>?
     @State private var isMuted = false
     @State private var isPlaying = true
     
@@ -49,58 +63,102 @@ struct HistoryDetailView: View {
         min(max(dragOffset / dismissThreshold, 0), 1)
     }
     
-    private var safeAreaTop: CGFloat {
+    // Read safe-area from the presentation window rather than deriving it from
+    // nested SwiftUI geometry. That was the most stable approach for this
+    // fullscreen cover on Dynamic Island devices.
+    private var safeAreaInsets: UIEdgeInsets {
         guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let insets = scene.windows.first?.safeAreaInsets else { return 47 }
-        return insets.top
+              let window = scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first
+        else { return UIEdgeInsets(top: 59, left: 0, bottom: 34, right: 0) }
+        return window.safeAreaInsets
     }
     
-    private var safeAreaBottom: CGFloat {
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let insets = scene.windows.first?.safeAreaInsets else { return 34 }
-        return insets.bottom
-    }
+    private var screenWidth: CGFloat { UIScreen.main.bounds.width }
+    private var screenHeight: CGFloat { UIScreen.main.bounds.height }
+    private var hasPlayableVideo: Bool { generation.fullOutputUrl != nil }
+    
+    // MARK: - Body
     
     var body: some View {
         let viewScale = 1.0 - (dragFraction * 0.1)
         let cornerRadius = dragFraction * 24
-        let bgOpacity = 1.0 - (dragFraction * 0.4)
+        let safeTop = max(safeAreaInsets.top, 20)
+        let safeBottom = max(safeAreaInsets.bottom, 20)
         
         ZStack {
-            // Fixed background — dims during drag to reveal list underneath
+            // 1. Fixed dim background — visible during drag-to-dismiss
             Color.black
-                .opacity(bgOpacity)
+                .opacity(1.0 - (dragFraction * 0.4))
                 .ignoresSafeArea()
             
-            // Movable content group — scales/moves/rounds during drag
+            // 2. Movable content strictly bound to screen size.
+            // The hard screen-sized frame is important: without it, the video /
+            // thumbnail layer can report a larger natural width and push the
+            // controls off-screen, especially on taller phones.
             ZStack {
+                // Video + background fill the screen
                 Color.black
-                
                 videoPlayerContent
                 
+                // Tap target for showing/hiding controls
                 Color.clear
                     .contentShape(Rectangle())
                     .onTapGesture { toggleControls() }
                 
-                controlsOverlay
+                // Gradient scrims behind controls
+                controlsScrim
+                    .opacity(controlsReady && showControls ? 1 : 0)
+                    .allowsHitTesting(false)
                     .animation(.spring(response: 0.35, dampingFraction: 0.85), value: showControls)
                 
-                if showSaveSuccess { saveSuccessToast }
+                // Interactive controls (respect safe area via manual padding)
+                VStack(spacing: 0) {
+                    topControls
+                        .padding(.top, safeTop)
+                        .offset(y: showControls ? 0 : -20)
+                    Spacer()
+                    bottomControls
+                        .padding(.bottom, safeBottom)
+                        .offset(y: showControls ? 0 : 20)
+                }
+                .opacity(controlsReady && showControls ? 1 : 0)
+                .allowsHitTesting(controlsReady && showControls)
+                .animation(.spring(response: 0.35, dampingFraction: 0.85), value: showControls)
+                
+                // Thin always-on progress bar (when controls are hidden)
+                VStack {
+                    Spacer()
+                    VideoProgressBar(
+                        progress: progress,
+                        elapsedSeconds: elapsedSeconds,
+                        totalSeconds: totalSeconds,
+                        isExpanded: false
+                    )
+                    .padding(.horizontal, VideoSpacing.screenHorizontal)
+                    .padding(.bottom, safeBottom + 2)
+                }
+                .opacity(controlsReady && !showControls ? 1 : 0)
+                .allowsHitTesting(false)
+                
+                // Save success toast
+                if showSaveSuccess { saveSuccessToast(safeBottom: safeBottom) }
             }
+            .frame(width: screenWidth, height: screenHeight)
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
             .scaleEffect(viewScale, anchor: .top)
             .offset(y: dragOffset)
             .gesture(dismissDragGesture)
-            .ignoresSafeArea()
+            .position(x: screenWidth / 2, y: screenHeight / 2)
         }
         .ignoresSafeArea()
         .statusBarHidden(true)
         .onReceive(progressTimer) { _ in updateProgress() }
         .sheet(isPresented: $showShareSheet) {
             if let fileUrl = shareFileUrl {
-                ShareSheet(items: [fileUrl, ExternalURLs.shareAttribution])
+                ShareSheet(items: [fileUrl, ExternalURLs.shareAttribution]) {
+                    HistoryItemActionHandler.cleanupTemporaryShareFile(fileUrl)
+                }
                     .onDisappear {
-                        try? FileManager.default.removeItem(at: fileUrl)
                         shareFileUrl = nil
                     }
             }
@@ -129,6 +187,7 @@ struct HistoryDetailView: View {
         }
         .onDisappear {
             autoHideTask?.cancel()
+            saveSuccessHideTask?.cancel()
         }
     }
     
@@ -138,7 +197,11 @@ struct HistoryDetailView: View {
         Group {
             if let url = generation.fullOutputUrl {
                 ZStack {
-                    VideoThumbnailView(thumbnailUrl: nil, videoUrl: url)
+                    // Match the fullscreen player with .fit too, otherwise the
+                    // placeholder thumbnail can appear more zoomed than the video
+                    // during the first moments of the transition.
+                    VideoThumbnailView(thumbnailUrl: nil, videoUrl: url, contentMode: .fit)
+                        .frame(width: screenWidth, height: screenHeight)
                         .clipped()
                     
                     RemoteVideoPlayer(
@@ -148,7 +211,9 @@ struct HistoryDetailView: View {
                         videoGravity: .resizeAspect,
                         timeProvider: timeProvider
                     )
+                    .frame(width: screenWidth, height: screenHeight)
                 }
+                .frame(width: screenWidth, height: screenHeight)
             } else {
                 VStack(spacing: VideoSpacing.sm) {
                     Image(systemName: "video.slash")
@@ -156,41 +221,9 @@ struct HistoryDetailView: View {
                     Text("Video unavailable")
                         .font(.videoCaption)
                 }
+                .frame(width: screenWidth, height: screenHeight)
                 .foregroundColor(.videoTextTertiary)
             }
-        }
-    }
-    
-    // MARK: - Controls Overlay
-    
-    private var controlsOverlay: some View {
-        ZStack {
-            controlsScrim
-            
-            VStack(spacing: 0) {
-                topControls
-                    .padding(.top, safeAreaTop)
-                    .offset(y: showControls ? 0 : -20)
-                Spacer()
-                bottomControls
-                    .padding(.bottom, safeAreaBottom)
-                    .offset(y: showControls ? 0 : 20)
-            }
-            .opacity(controlsReady && showControls ? 1 : 0)
-            .allowsHitTesting(controlsReady && showControls)
-            
-            VStack {
-                Spacer()
-                VideoProgressBar(
-                    progress: progress,
-                    elapsedSeconds: elapsedSeconds,
-                    totalSeconds: totalSeconds,
-                    isExpanded: false
-                )
-                .padding(.bottom, safeAreaBottom + 2)
-            }
-            .opacity(controlsReady && !showControls ? 1 : 0)
-            .allowsHitTesting(false)
         }
     }
     
@@ -251,8 +284,6 @@ struct HistoryDetailView: View {
                 .frame(height: 200)
             }
         }
-        .opacity(controlsReady && showControls ? 1 : 0)
-        .allowsHitTesting(false)
     }
     
     // MARK: - Top Controls
@@ -270,6 +301,8 @@ struct HistoryDetailView: View {
                     Text(generation.displayName)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.white)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     
                     if generation.isCustomTemplate {
                         Text("Custom")
@@ -279,14 +312,16 @@ struct HistoryDetailView: View {
                             .padding(.vertical, 2)
                             .background(Color.videoAccent)
                             .cornerRadius(4)
+                            .layoutPriority(1) // Ensure badge isn't truncated
                     }
                 }
-                .lineLimit(1)
                 
                 Text(generation.createdAt.formatted(date: .abbreviated, time: .omitted))
                     .font(.system(size: 12))
                     .foregroundColor(.white.opacity(0.6))
+                    .lineLimit(1)
             }
+            .frame(maxWidth: screenWidth - 140) // Prevent long titles from pushing buttons off-screen
             
             Spacer()
             
@@ -302,17 +337,17 @@ struct HistoryDetailView: View {
     private var bottomControls: some View {
         VStack(spacing: VideoSpacing.md) {
             HStack(spacing: VideoSpacing.md) {
-                glassCircleButton(icon: isPlaying ? "pause.fill" : "play.fill") {
+                glassCircleButton(icon: isPlaying ? "pause.fill" : "play.fill", isEnabled: hasPlayableVideo) {
                     isPlaying.toggle()
                 }
-                glassCircleButton(icon: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill") {
+                glassCircleButton(icon: isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill", isEnabled: hasPlayableVideo) {
                     isMuted.toggle()
                 }
                 Spacer()
-                glassCircleButton(icon: "square.and.arrow.down", isLoading: isSaving, tint: .videoAccent) {
+                glassCircleButton(icon: "square.and.arrow.down", isLoading: isSaving, tint: .videoAccent, isEnabled: hasPlayableVideo) {
                     saveToPhotos()
                 }
-                glassCircleButton(icon: "square.and.arrow.up", isLoading: isSharing, tint: .videoAccent) {
+                glassCircleButton(icon: "square.and.arrow.up", isLoading: isSharing, tint: .videoAccent, isEnabled: hasPlayableVideo) {
                     shareVideo()
                 }
             }
@@ -335,7 +370,11 @@ struct HistoryDetailView: View {
     // MARK: - Glass Button
     
     private func glassCircleButton(
-        icon: String, isLoading: Bool = false, tint: Color? = nil, action: @escaping () -> Void
+        icon: String,
+        isLoading: Bool = false,
+        tint: Color? = nil,
+        isEnabled: Bool = true,
+        action: @escaping () -> Void
     ) -> some View {
         Button {
             HapticManager.shared.selection()
@@ -354,8 +393,9 @@ struct HistoryDetailView: View {
             .frame(width: 44, height: 44)
             .background(.ultraThinMaterial)
             .clipShape(Circle())
+            .opacity(isEnabled ? 1 : 0.4)
         }
-        .disabled(isLoading)
+        .disabled(isLoading || !isEnabled)
         .buttonStyle(.plain)
     }
     
@@ -392,7 +432,7 @@ struct HistoryDetailView: View {
     
     // MARK: - Toast
     
-    private var saveSuccessToast: some View {
+    private func saveSuccessToast(safeBottom: CGFloat) -> some View {
         VStack {
             Spacer()
             HStack(spacing: VideoSpacing.sm) {
@@ -404,7 +444,7 @@ struct HistoryDetailView: View {
             .background(.ultraThinMaterial)
             .cornerRadius(VideoSpacing.radiusFull)
             .videoElevatedShadow()
-            .padding(.bottom, safeAreaBottom + 60)
+            .padding(.bottom, safeBottom + 60)
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: showSaveSuccess)
@@ -413,17 +453,17 @@ struct HistoryDetailView: View {
     // MARK: - Actions
     
     private func saveToPhotos() {
-        guard let urlString = generation.outputVideoUrl, !isSaving else { return }
+        guard generation.fullOutputUrl != nil, !isSaving else { return }
         isSaving = true
         Analytics.track(.videoSaved)
         HapticManager.shared.lightImpact()
         Task {
             do {
-                let data = try await StorageService.shared.downloadVideo(from: urlString)
-                try await saveVideoToPhotoLibrary(data: data)
+                try await HistoryItemActionHandler.saveToPhotos(generation: generation)
                 await MainActor.run {
-                    isSaving = false; showSaveSuccess = true; HapticManager.shared.success()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { showSaveSuccess = false }
+                    isSaving = false
+                    triggerSaveSuccessToast()
+                    HapticManager.shared.success()
                 }
             } catch {
                 await MainActor.run { isSaving = false; showSaveError = true; HapticManager.shared.error() }
@@ -431,38 +471,32 @@ struct HistoryDetailView: View {
         }
     }
     
-    private func saveVideoToPhotoLibrary(data: Data) async throws {
-        return try await withCheckedThrowingContinuation { continuation in
-            let tempUrl = FileManager.default.temporaryDirectory
-                .appendingPathComponent(UUID().uuidString).appendingPathExtension("mp4")
-            do {
-                try data.write(to: tempUrl)
-                PHPhotoLibrary.shared().performChanges {
-                    PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: tempUrl)
-                } completionHandler: { success, error in
-                    try? FileManager.default.removeItem(at: tempUrl)
-                    if success { continuation.resume() }
-                    else { continuation.resume(throwing: error ?? StorageServiceError.downloadFailed) }
-                }
-            } catch { continuation.resume(throwing: error) }
-        }
-    }
-    
     private func shareVideo() {
-        guard let urlString = generation.outputVideoUrl, !isSharing else { return }
+        guard generation.fullOutputUrl != nil, !isSharing else { return }
         isSharing = true
         Analytics.track(.videoShared)
         HapticManager.shared.lightImpact()
         Task {
             do {
-                let data = try await StorageService.shared.downloadVideo(from: urlString)
-                let tempUrl = FileManager.default.temporaryDirectory
-                    .appendingPathComponent("\(generation.displayName.replacingOccurrences(of: " ", with: "_")).mp4")
-                try data.write(to: tempUrl)
+                let tempUrl = try await HistoryItemActionHandler.prepareShareFile(for: generation)
                 await MainActor.run { isSharing = false; shareFileUrl = tempUrl; showShareSheet = true }
             } catch {
                 await MainActor.run { isSharing = false; HapticManager.shared.error() }
             }
+        }
+    }
+    
+    private func triggerSaveSuccessToast() {
+        saveSuccessHideTask?.cancel()
+        showSaveSuccess = false
+        Task { @MainActor in
+            await Task.yield()
+            showSaveSuccess = true
+        }
+        saveSuccessHideTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
+            showSaveSuccess = false
         }
     }
 }

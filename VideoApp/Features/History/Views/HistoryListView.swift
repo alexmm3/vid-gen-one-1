@@ -3,7 +3,12 @@
 //  AIVideo
 //
 //  My Videos list showing past and pending generations.
-//  Uses iOS 18 .zoom transition for seamless hero animation from card → fullscreen.
+//
+//  ⚠️  PROVEN HERO TRANSITION — DO NOT CHANGE THE PRESENTATION PATTERN  ⚠️
+//  Uses iOS 18 .fullScreenCover + .navigationTransition(.zoom) for a native
+//  Photos-like hero animation. The card applies .matchedTransitionSource;
+//  the detail view applies .navigationTransition(.zoom). System handles the
+//  rest. See HistoryDetailView header for the full contract.
 //
 
 import SwiftUI
@@ -13,6 +18,14 @@ struct HistoryListView: View {
     @ObservedObject private var activeGenerationManager = ActiveGenerationManager.shared
     
     @State private var selectedGeneration: LocalGeneration?
+    @State private var pendingDeleteGeneration: LocalGeneration?
+    @State private var isSavingGenerationID: String?
+    @State private var isSharingGenerationID: String?
+    @State private var showSaveSuccess = false
+    @State private var showSaveError = false
+    @State private var shareFileUrl: URL?
+    @State private var showShareSheet = false
+    @State private var saveSuccessHideTask: Task<Void, Never>?
     @Namespace private var heroNamespace
     
     private var hasPending: Bool {
@@ -32,13 +45,59 @@ struct HistoryListView: View {
         .navigationTitle("My Videos")
         .navigationBarTitleDisplayMode(.large)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        // Keep fullScreenCover + zoom together.
+        // Replacing this with an overlay / custom hero broke alignment and clipping.
         .fullScreenCover(item: $selectedGeneration) { generation in
             HistoryDetailView(generation: generation, namespace: heroNamespace)
                 .heroZoomTarget(sourceID: generation.id, in: heroNamespace)
         }
+        .sheet(isPresented: $showShareSheet) {
+            if let fileUrl = shareFileUrl {
+                ShareSheet(items: [fileUrl, ExternalURLs.shareAttribution]) {
+                    HistoryItemActionHandler.cleanupTemporaryShareFile(fileUrl)
+                }
+                    .onDisappear {
+                        shareFileUrl = nil
+                    }
+            }
+        }
+        .alert("Delete Video", isPresented: deleteAlertBinding) {
+            Button("Cancel", role: .cancel) {
+                pendingDeleteGeneration = nil
+            }
+            Button("Delete", role: .destructive) {
+                guard let generation = pendingDeleteGeneration else { return }
+                if selectedGeneration?.id == generation.id {
+                    selectedGeneration = nil
+                }
+                viewModel.deleteGeneration(generation)
+                pendingDeleteGeneration = nil
+            }
+        } message: {
+            Text("This will remove the video from My Videos. This cannot be undone.")
+        }
+        .alert("Save Failed", isPresented: $showSaveError) {
+            Button("OK") { }
+        } message: {
+            Text("Unable to save video to Photos. Please check your permissions.")
+        }
         .onAppear {
             viewModel.trackHistoryViewed()
             viewModel.syncPendingGeneration()
+        }
+        .onDisappear {
+            saveSuccessHideTask?.cancel()
+        }
+        .overlay(alignment: .bottom) {
+            if showSaveSuccess {
+                saveSuccessToast
+            }
+        }
+        .onChange(of: viewModel.generations) { _, generations in
+            guard let selectedGeneration else { return }
+            if !generations.contains(where: { $0.id == selectedGeneration.id }) {
+                self.selectedGeneration = nil
+            }
         }
         .task {
             await viewModel.syncHistory()
@@ -95,6 +154,9 @@ struct HistoryListView: View {
                         HistoryItemCard(generation: generation)
                             .heroZoomSource(id: generation.id, in: heroNamespace)
                     }
+                    .contextMenu {
+                        contextMenu(for: generation)
+                    }
                     .buttonStyle(ScaleButtonStyle())
                 }
             }
@@ -109,11 +171,133 @@ struct HistoryListView: View {
     private func pendingGenerationCard(_ pending: PendingGeneration) -> some View {
         PendingGenerationCardView(pending: pending)
     }
+    
+    private var deleteAlertBinding: Binding<Bool> {
+        Binding(
+            get: { pendingDeleteGeneration != nil },
+            set: { isPresented in
+                if !isPresented {
+                    pendingDeleteGeneration = nil
+                }
+            }
+        )
+    }
+    
+    @ViewBuilder
+    private func contextMenu(for generation: LocalGeneration) -> some View {
+        Button {
+            selectedGeneration = generation
+        } label: {
+            Label("Open", systemImage: "arrow.up.left.and.arrow.down.right")
+        }
+        
+        Button {
+            save(generation: generation)
+        } label: {
+            Label("Save", systemImage: "square.and.arrow.down")
+        }
+        .disabled(generation.fullOutputUrl == nil || isSavingGenerationID != nil)
+        
+        Button {
+            share(generation: generation)
+        } label: {
+            Label("Share", systemImage: "square.and.arrow.up")
+        }
+        .disabled(generation.fullOutputUrl == nil || isSharingGenerationID != nil)
+        
+        Button(role: .destructive) {
+            pendingDeleteGeneration = generation
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
+    }
+    
+    private func save(generation: LocalGeneration) {
+        guard generation.fullOutputUrl != nil, isSavingGenerationID == nil else { return }
+        isSavingGenerationID = generation.id
+        Analytics.track(.videoSaved)
+        HapticManager.shared.lightImpact()
+        
+        Task {
+            do {
+                try await HistoryItemActionHandler.saveToPhotos(generation: generation)
+                await MainActor.run {
+                    isSavingGenerationID = nil
+                    triggerSaveSuccessToast()
+                    HapticManager.shared.success()
+                }
+            } catch {
+                await MainActor.run {
+                    isSavingGenerationID = nil
+                    showSaveError = true
+                    HapticManager.shared.error()
+                }
+            }
+        }
+    }
+    
+    private func share(generation: LocalGeneration) {
+        guard generation.fullOutputUrl != nil, isSharingGenerationID == nil else { return }
+        isSharingGenerationID = generation.id
+        Analytics.track(.videoShared)
+        HapticManager.shared.lightImpact()
+        
+        Task {
+            do {
+                let tempUrl = try await HistoryItemActionHandler.prepareShareFile(for: generation)
+                await MainActor.run {
+                    isSharingGenerationID = nil
+                    shareFileUrl = tempUrl
+                    showShareSheet = true
+                }
+            } catch {
+                await MainActor.run {
+                    isSharingGenerationID = nil
+                    HapticManager.shared.error()
+                }
+            }
+        }
+    }
+    
+    private func triggerSaveSuccessToast() {
+        saveSuccessHideTask?.cancel()
+        showSaveSuccess = false
+        Task { @MainActor in
+            await Task.yield()
+            showSaveSuccess = true
+        }
+        saveSuccessHideTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
+            showSaveSuccess = false
+        }
+    }
+    
+    private var saveSuccessToast: some View {
+        HStack(spacing: VideoSpacing.sm) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(.videoAccent)
+            Text("Saved to Photos")
+                .font(.videoBody)
+                .foregroundColor(.white)
+        }
+        .padding(.horizontal, VideoSpacing.lg)
+        .padding(.vertical, VideoSpacing.md)
+        .background(.ultraThinMaterial)
+        .cornerRadius(VideoSpacing.radiusFull)
+        .videoElevatedShadow()
+        .padding(.bottom, 110)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: showSaveSuccess)
+    }
 }
 
 // MARK: - Zoom Transition Helpers
 
 extension View {
+    // These two helpers are intentionally tiny wrappers around the system API.
+    // When the hero transition was flaky, the reliable fix was NOT more custom
+    // animation code - it was preserving the native matchedTransitionSource/zoom pair.
     func heroZoomSource(id: some Hashable, in namespace: Namespace.ID) -> some View {
         self.matchedTransitionSource(id: id, in: namespace)
     }

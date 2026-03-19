@@ -22,6 +22,12 @@ interface GrokPollResponse {
   };
 }
 
+function getGenerationAgeMinutes(createdAt: string, requestId?: string | null): number {
+  const requestTimestamp = requestId?.match(/^req_(\d+)_/)?.[1];
+  const effectiveStartedAt = requestTimestamp ? Number(requestTimestamp) : new Date(createdAt).getTime();
+  return (Date.now() - effectiveStartedAt) / 60000;
+}
+
 serve(async (req) => {
   const logger = new Logger('check-generation-status');
 
@@ -191,7 +197,7 @@ serve(async (req) => {
         }
       } else {
         const errText = await pollRes.text();
-        const ageMinutes = (Date.now() - new Date(generation.created_at).getTime()) / 60000;
+        const ageMinutes = getGenerationAgeMinutes(generation.created_at, generation.request_id);
         const failureReason = classifyGrokPollHttpFailure({
           statusCode: pollRes.status,
           ageMinutes,

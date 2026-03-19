@@ -112,9 +112,10 @@ extension CachedAsyncImage where Content == Image, Placeholder == Color {
 struct VideoThumbnailView: View {
     let thumbnailUrl: URL?
     let videoUrl: URL?
+    var contentMode: ContentMode = .fill
     
     var body: some View {
-        VideoThumbnailContentView(thumbnailUrl: thumbnailUrl, videoUrl: videoUrl)
+        VideoThumbnailContentView(thumbnailUrl: thumbnailUrl, videoUrl: videoUrl, contentMode: contentMode)
             .id(thumbnailUrl?.absoluteString ?? videoUrl?.absoluteString ?? "nil_url")
     }
 }
@@ -122,13 +123,15 @@ struct VideoThumbnailView: View {
 private struct VideoThumbnailContentView: View {
     let thumbnailUrl: URL?
     let videoUrl: URL?
+    let contentMode: ContentMode
     
     @State private var thumbnail: UIImage?
     @State private var isLoading = false
     
-    init(thumbnailUrl: URL?, videoUrl: URL?) {
+    init(thumbnailUrl: URL?, videoUrl: URL?, contentMode: ContentMode) {
         self.thumbnailUrl = thumbnailUrl
         self.videoUrl = videoUrl
+        self.contentMode = contentMode
         
         // Try to load synchronously from memory cache to avoid flashes during scroll
         if let url = thumbnailUrl, let cached = ImageCacheManager.shared.getMemoryCachedImage(for: url) {
@@ -146,7 +149,7 @@ private struct VideoThumbnailContentView: View {
             if let thumbnail = thumbnail {
                 Image(uiImage: thumbnail)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .aspectRatio(contentMode: contentMode)
             } else {
                 // Loading placeholder
                 Color.videoSurface

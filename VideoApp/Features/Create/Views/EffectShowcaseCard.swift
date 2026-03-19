@@ -14,6 +14,8 @@ struct EffectShowcaseCard: View {
     let isCentered: Bool
     let onSelect: () -> Void
 
+    @State private var showVideoPlayer = false
+
     var body: some View {
         Button(action: {
             HapticManager.shared.selection()
@@ -28,6 +30,18 @@ struct EffectShowcaseCard: View {
                         y: isCentered ? 6 : 3)
         }
         .buttonStyle(ScaleButtonStyle(scale: 0.97))
+        .onAppear {
+            showVideoPlayer = isCentered
+        }
+        .onChange(of: isCentered) { _, centered in
+            if !centered { showVideoPlayer = false }
+        }
+        .task(id: isCentered) {
+            guard isCentered, !showVideoPlayer else { return }
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            showVideoPlayer = true
+        }
     }
 
     // MARK: - Video / Thumbnail Layer
@@ -39,10 +53,12 @@ struct EffectShowcaseCard: View {
                 videoUrl: effect.fullPreviewUrl
             )
 
-            if isCentered {
+            if showVideoPlayer {
                 LoopingRemoteVideoPlayer(url: effect.fullPreviewUrl)
+                    .transition(.opacity)
             }
         }
+        .animation(.easeInOut(duration: 0.35), value: showVideoPlayer)
         .frame(width: cardWidth, height: cardHeight)
         .clipped()
     }
