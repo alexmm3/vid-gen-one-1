@@ -111,7 +111,7 @@ extension View {
                         
                         VStack(spacing: VideoSpacing.md) {
                             ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: .videoAccent))
+                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                 .scaleEffect(1.5)
                             
                             if let message = message {
@@ -212,6 +212,121 @@ extension View {
         return renderer.image { _ in
             view?.drawHierarchy(in: controller.view.bounds, afterScreenUpdates: true)
         }
+    }
+}
+
+// MARK: - Shimmer Effect
+
+extension View {
+    func shimmer() -> some View {
+        modifier(ShimmerModifier())
+    }
+}
+
+private struct ShimmerModifier: ViewModifier {
+    @State private var phase: CGFloat = -1
+    
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                GeometryReader { geo in
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0),
+                            Color.white.opacity(0.08),
+                            Color.white.opacity(0)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: geo.size.width * 0.6)
+                    .offset(x: phase * (geo.size.width * 1.6))
+                    .clipped()
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .onAppear {
+                withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
+                    phase = 1
+                }
+            }
+    }
+}
+
+// MARK: - UIImage Dominant Color
+
+extension UIImage {
+    /// Extracts the dominant color by down-sampling to 1x1 pixel.
+    var dominantColor: UIColor? {
+        guard let cgImage = self.cgImage else { return nil }
+        let size = CGSize(width: 4, height: 4)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        var pixel = [UInt8](repeating: 0, count: 64)
+        guard let context = CGContext(
+            data: &pixel,
+            width: 4,
+            height: 4,
+            bitsPerComponent: 8,
+            bytesPerRow: 16,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        context.draw(cgImage, in: CGRect(origin: .zero, size: size))
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0
+        for i in stride(from: 0, to: 64, by: 4) {
+            r += CGFloat(pixel[i])
+            g += CGFloat(pixel[i + 1])
+            b += CGFloat(pixel[i + 2])
+        }
+        let count: CGFloat = 16
+        return UIColor(red: r / count / 255, green: g / count / 255, blue: b / count / 255, alpha: 1)
+    }
+    
+    /// Extracts 3 vertical colors (top, middle, bottom) by down-sampling to 1x3 pixels.
+    var verticalColors: [UIColor]? {
+        guard let cgImage = self.cgImage else { return nil }
+        let size = CGSize(width: 1, height: 3)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        var pixel = [UInt8](repeating: 0, count: 12)
+        guard let context = CGContext(
+            data: &pixel,
+            width: 1,
+            height: 3,
+            bitsPerComponent: 8,
+            bytesPerRow: 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        context.draw(cgImage, in: CGRect(origin: .zero, size: size))
+        
+        var colors: [UIColor] = []
+        for i in stride(from: 0, to: 12, by: 4) {
+            let r = CGFloat(pixel[i]) / 255
+            let g = CGFloat(pixel[i + 1]) / 255
+            let b = CGFloat(pixel[i + 2]) / 255
+            
+            var hue: CGFloat = 0
+            var saturation: CGFloat = 0
+            var brightness: CGFloat = 0
+            var alpha: CGFloat = 0
+            
+            let color = UIColor(red: r, green: g, blue: b, alpha: 1)
+            if color.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) {
+                // Boost saturation and brightness slightly for a better ambient effect
+                let finalSat = saturation > 0.05 ? min(saturation * 1.3, 1.0) : saturation
+                let finalBri = min(brightness * 1.2 + 0.1, 1.0)
+                let boostedColor = UIColor(
+                    hue: hue,
+                    saturation: finalSat,
+                    brightness: finalBri,
+                    alpha: 1.0
+                )
+                colors.append(boostedColor)
+            } else {
+                colors.append(color)
+            }
+        }
+        return colors
     }
 }
 

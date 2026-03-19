@@ -2,9 +2,7 @@
 //  EffectShowcaseCard.swift
 //  AIVideo
 //
-//  Large showcase card for the horizontal effect carousel.
-//  Displays a looping video preview with an optional "before" input image
-//  and the effect name overlaid on a gradient.
+//  Clean showcase card — pure video preview with no overlaid text or images.
 //
 
 import SwiftUI
@@ -21,17 +19,13 @@ struct EffectShowcaseCard: View {
             HapticManager.shared.selection()
             onSelect()
         }) {
-            ZStack(alignment: .bottom) {
-                videoLayer
-                gradientOverlay
-                contentOverlay
-            }
-            .frame(width: cardWidth, height: cardHeight)
-            .clipShape(RoundedRectangle(cornerRadius: VideoSpacing.radiusXLarge))
-            .shadow(color: .black.opacity(isCentered ? 0.5 : 0.25),
-                    radius: isCentered ? 24 : 12,
-                    x: 0,
-                    y: isCentered ? 8 : 4)
+            videoLayer
+                .frame(width: cardWidth, height: cardHeight)
+                .clipShape(RoundedRectangle(cornerRadius: VideoSpacing.radiusXLarge))
+                .shadow(color: .black.opacity(isCentered ? 0.3 : 0.12),
+                        radius: isCentered ? 20 : 10,
+                        x: 0,
+                        y: isCentered ? 6 : 3)
         }
         .buttonStyle(ScaleButtonStyle(scale: 0.97))
     }
@@ -51,77 +45,6 @@ struct EffectShowcaseCard: View {
         }
         .frame(width: cardWidth, height: cardHeight)
         .clipped()
-    }
-
-    // MARK: - Bottom Gradient
-
-    private var gradientOverlay: some View {
-        LinearGradient(
-            colors: [
-                .clear,
-                .clear,
-                .black.opacity(0.3),
-                .black.opacity(0.85)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-    }
-
-    // MARK: - Text + Before Image Overlay
-
-    private var contentOverlay: some View {
-        HStack(alignment: .bottom, spacing: VideoSpacing.sm) {
-            beforeImageBadge
-            effectInfo
-            Spacer(minLength: 0)
-        }
-        .padding(VideoSpacing.md)
-    }
-
-    private static let originalImageWidth: CGFloat = 52
-    private static let originalImageHeight: CGFloat = originalImageWidth * 16.0 / 9.0
-
-    @ViewBuilder
-    private var beforeImageBadge: some View {
-        if let url = effect.fullSampleInputImageUrl {
-            VStack(spacing: 4) {
-                CachedAsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Color.videoSurface
-                }
-                .frame(width: Self.originalImageWidth, height: Self.originalImageHeight)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.white.opacity(0.5), lineWidth: 1.5)
-                )
-                .shadow(color: .black.opacity(0.4), radius: 6, x: 0, y: 2)
-
-                Text("Original")
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
-            }
-        }
-    }
-
-    private var effectInfo: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(effect.name)
-                .font(.system(size: 20, weight: .bold))
-                .foregroundColor(.white)
-                .lineLimit(2)
-
-            if let description = effect.description, !description.isEmpty {
-                Text(description)
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundColor(.white.opacity(0.75))
-                    .lineLimit(2)
-            }
-        }
     }
 }
 

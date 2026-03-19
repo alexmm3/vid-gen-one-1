@@ -147,6 +147,21 @@ final class GenerationViewModel: ObservableObject {
             isCustom: isCustom
         ))
         
+        // Register intent immediately so it persists even if user leaves
+        activeGenerationManager.startUploading(
+            templateName: template.name,
+            templateId: template.id.uuidString,
+            referenceVideoUrl: template.videoUrl
+        )
+        
+        // Allow early dismissal after a short delay for better UX
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+            if self.isGenerating {
+                self.generationSubmitted = true
+            }
+        }
+        
         do {
             // Step 0: If reference video is a local file, upload it first
             var referenceVideoUrl = template.videoUrl
@@ -170,33 +185,23 @@ final class GenerationViewModel: ObservableObject {
                 referenceVideoUrl: referenceVideoUrl
             )
             
-            // Step 3: Register with ActiveGenerationManager for persistence
-            activeGenerationManager.startGeneration(
+            // Step 3: Transition to processing state
+            activeGenerationManager.transitionToProcessing(
                 generationId: job.generationId,
                 fetchId: job.fetchId,
-                templateName: template.name,
-                templateId: template.id.uuidString,
-                inputImageUrl: imageUrl,
-                referenceVideoUrl: referenceVideoUrl
+                inputImageUrl: imageUrl
             )
             
-            // Step 4: Mark as submitted - user can now dismiss
+            // Step 4: Mark as processing
             progress = .processing(eta: nil)
             generationSubmitted = true
             
             // Step 5: Start background polling (non-blocking)
-            // Polling continues even if user navigates away
             activeGenerationManager.startBackgroundPolling()
             
-            // Note: We no longer await pollUntilComplete() here
-            // The background polling will trigger notifications when done
-            // handleBackgroundCompletion() will be called when complete
-            
         } catch let error as GenerationServiceError {
-            activeGenerationManager.clearPendingGeneration()
             handleError(error)
         } catch {
-            activeGenerationManager.clearPendingGeneration()
             handleError(.networkError(error))
         }
     }
@@ -211,6 +216,21 @@ final class GenerationViewModel: ObservableObject {
         error = nil
 
         Analytics.track(.generationStarted(templateId: effect.id.uuidString, isCustom: false))
+
+        // Register intent immediately
+        activeGenerationManager.startUploading(
+            templateName: effect.name,
+            templateId: effect.id.uuidString,
+            referenceVideoUrl: "effect"
+        )
+        
+        // Allow early dismissal after a short delay
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if self.isGenerating {
+                self.generationSubmitted = true
+            }
+        }
 
         do {
             progress = .uploading
@@ -231,13 +251,10 @@ final class GenerationViewModel: ObservableObject {
                 detectedAspectRatio: uploadResult.detectedAspectRatio
             )
 
-            activeGenerationManager.startGeneration(
+            activeGenerationManager.transitionToProcessing(
                 generationId: job.generationId,
                 fetchId: job.fetchId,
-                templateName: effect.name,
-                templateId: effect.id.uuidString,
-                inputImageUrl: uploadResult.url,
-                referenceVideoUrl: "effect"
+                inputImageUrl: uploadResult.url
             )
 
             progress = .processing(eta: nil)
@@ -245,10 +262,8 @@ final class GenerationViewModel: ObservableObject {
             activeGenerationManager.startBackgroundPolling()
 
         } catch let error as GenerationServiceError {
-            activeGenerationManager.clearPendingGeneration()
             handleError(error)
         } catch {
-            activeGenerationManager.clearPendingGeneration()
             handleError(.networkError(error))
         }
     }
@@ -263,6 +278,21 @@ final class GenerationViewModel: ObservableObject {
         error = nil
         
         Analytics.track(.generationStarted(templateId: nil, isCustom: true))
+        
+        // Register intent immediately
+        activeGenerationManager.startUploading(
+            templateName: templateName,
+            templateId: nil,
+            referenceVideoUrl: videoUrl
+        )
+        
+        // Allow early dismissal after a short delay
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            if self.isGenerating {
+                self.generationSubmitted = true
+            }
+        }
         
         do {
             // Step 0: If video is a local file, upload it first
@@ -287,17 +317,14 @@ final class GenerationViewModel: ObservableObject {
                 referenceVideoUrl: resolvedVideoUrl
             )
             
-            // Step 3: Register with ActiveGenerationManager for persistence
-            activeGenerationManager.startGeneration(
+            // Step 3: Transition to processing
+            activeGenerationManager.transitionToProcessing(
                 generationId: job.generationId,
                 fetchId: job.fetchId,
-                templateName: templateName,
-                templateId: nil,
-                inputImageUrl: imageUrl,
-                referenceVideoUrl: resolvedVideoUrl
+                inputImageUrl: imageUrl
             )
             
-            // Step 4: Mark as submitted - user can now dismiss
+            // Step 4: Mark as processing
             progress = .processing(eta: nil)
             generationSubmitted = true
             
@@ -305,10 +332,8 @@ final class GenerationViewModel: ObservableObject {
             activeGenerationManager.startBackgroundPolling()
             
         } catch let error as GenerationServiceError {
-            activeGenerationManager.clearPendingGeneration()
             handleError(error)
         } catch {
-            activeGenerationManager.clearPendingGeneration()
             handleError(.networkError(error))
         }
     }
@@ -357,6 +382,8 @@ final class GenerationViewModel: ObservableObject {
     
     private func handleError(_ error: GenerationServiceError) {
         let wasGenerating = isGenerating
+        let isDismissed = !isGenerating && generationSubmitted
+        
         isGenerating = false
         progress = .failed(error.localizedDescription)
         HapticManager.shared.error()
@@ -364,19 +391,31 @@ final class GenerationViewModel: ObservableObject {
         // Track error
         Analytics.track(.generationFailed(error: error.localizedDescription))
         
-        // Delay setting the error if we were generating, to allow the fullScreenCover to dismiss
-        // otherwise SwiftUI swallows the alert
-        if wasGenerating {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        // Clear from active manager if it failed during upload
+        activeGenerationManager.clearPendingGeneration()
+        
+        if isDismissed {
+            // User already dismissed the view, show a toast instead of an alert
+            NotificationCenter.default.post(
+                name: .generationFailed,
+                object: nil,
+                userInfo: ["error": error.localizedDescription]
+            )
+        } else {
+            // Delay setting the error if we were generating, to allow the fullScreenCover to dismiss
+            // otherwise SwiftUI swallows the alert
+            if wasGenerating {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.error = error
+                    if error.isSubscriptionError {
+                        self.showPaywall = true
+                    }
+                }
+            } else {
                 self.error = error
                 if error.isSubscriptionError {
                     self.showPaywall = true
                 }
-            }
-        } else {
-            self.error = error
-            if error.isSubscriptionError {
-                self.showPaywall = true
             }
         }
     }

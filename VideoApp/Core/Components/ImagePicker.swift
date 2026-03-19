@@ -42,7 +42,12 @@ struct CameraImagePicker: UIViewControllerRepresentable {
         
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
             if let image = info[.originalImage] as? UIImage {
-                parent.image = image.fixedOrientation()
+                let fixedImage = image.fixedOrientation()
+                parent.image = fixedImage
+                
+                if parent.sourceType == .camera {
+                    UIImageWriteToSavedPhotosAlbum(fixedImage, nil, nil, nil)
+                }
             }
             parent.dismiss()
         }

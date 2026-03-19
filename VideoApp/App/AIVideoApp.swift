@@ -235,7 +235,7 @@ struct RootView: View {
         VStack(spacing: VideoSpacing.lg) {
             Image(systemName: "wand.and.sparkles")
                 .font(.system(size: 60))
-                .foregroundColor(.videoAccent)
+                .foregroundColor(.white)
             
             Text(BrandConfig.appName)
                 .font(.videoDisplayLarge)

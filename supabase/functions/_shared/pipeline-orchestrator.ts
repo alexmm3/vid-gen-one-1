@@ -77,9 +77,15 @@ function resolveContextValue(context: PipelineContext, path: string): unknown {
  */
 function resolveInputs(context: PipelineContext, inputMapping: Json): Json {
   const resolved: Json = {};
-  for (const [key, path] of Object.entries(inputMapping)) {
+  if (!inputMapping) return resolved;
+  let mapping = inputMapping;
+  if (typeof mapping === "string") {
+    try { mapping = JSON.parse(mapping); } catch (e) {}
+  }
+  for (const [key, path] of Object.entries(mapping)) {
     if (typeof path === "string") {
       resolved[key] = resolveContextValue(context, path);
+      console.log(`[resolveInputs] key=${key}, path=${path}, resolved=${resolved[key]}`);
     } else {
       resolved[key] = path;
     }
@@ -96,6 +102,8 @@ function storeOutputs(context: PipelineContext, stepName: string, outputMapping:
     context.steps = {};
   }
   (context.steps as any)[stepName] = { output: result };
+
+  if (!outputMapping) return;
 
   // Also map to specific context keys if requested
   for (const [contextKey, resultPath] of Object.entries(outputMapping)) {
@@ -121,6 +129,9 @@ function storeOutputs(context: PipelineContext, stepName: string, outputMapping:
  */
 function substituteTemplate(template: string, context: PipelineContext): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_match, key) => {
+    // We handle user_prompt automatically at the end of the pipeline, 
+    // so we ignore it in templates to prevent duplication.
+    if (key === "user_prompt") return "";
     const value = context[key];
     return value != null ? String(value) : "";
   });
@@ -213,9 +224,17 @@ async function executeStep(
       const promptSource = config.prompt_source as string | undefined;
       const imageSource = config.image_source as string | undefined;
 
-      const finalPrompt = promptSource
+      let finalPrompt = promptSource
         ? (context[promptSource] as string) || resolvedPrompt
         : resolvedPrompt || context.effect_concept;
+
+      if (context.user_prompt && typeof context.user_prompt === "string" && context.user_prompt.trim().length > 0) {
+        finalPrompt += `\n\n---
+USER'S CUSTOM INSTRUCTIONS:
+The user has provided additional specific wishes for this video. You must maintain the overall style and core concept described in the prompt above, but please try your best to incorporate the following user recommendations:
+"${context.user_prompt.trim()}"
+---`;
+      }
 
       const finalImage = imageSource
         ? (context[imageSource] as string) || context.user_image

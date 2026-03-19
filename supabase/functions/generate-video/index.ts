@@ -126,11 +126,8 @@ serve(async (req) => {
 
     let finalPrompt = effect.system_prompt_template;
     if (finalPrompt.includes("{{user_prompt}}")) {
-      if (user_prompt && user_prompt.trim().length > 0) {
-        finalPrompt = finalPrompt.replace("{{user_prompt}}", user_prompt.trim());
-      } else {
-        finalPrompt = finalPrompt.replace("{{user_prompt}}", "").trim();
-      }
+      // Legacy support: strip the placeholder. We automatically append user instructions later.
+      finalPrompt = finalPrompt.replace("{{user_prompt}}", "").trim();
     }
 
     let { data: device } = await supabase.from("devices").select("id").eq("device_id", device_id).single();
@@ -357,9 +354,18 @@ serve(async (req) => {
       model: rawModel,
     });
 
+    let grokPrompt = finalPrompt;
+    if (user_prompt && user_prompt.trim().length > 0) {
+      grokPrompt += `\n\n---
+USER'S CUSTOM INSTRUCTIONS:
+The user has provided additional specific wishes for this video. You must maintain the overall style and core concept described in the prompt above, but please try your best to incorporate the following user recommendations:
+"${user_prompt.trim()}"
+---`;
+    }
+
     const grokBody: Record<string, unknown> = {
       model: videoParams.model,
-      prompt: finalPrompt,
+      prompt: grokPrompt,
       image: { url: input_image_url },
       duration: videoParams.duration,
       aspect_ratio: videoParams.aspectRatio,

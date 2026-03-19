@@ -16,6 +16,9 @@ struct GeneratingView: View {
     
     @State private var pulseScale: CGFloat = 1.0
     @State private var shimmerOffset: CGFloat = -1.0
+    @State private var backgroundScale: CGFloat = 1.1
+    @State private var backgroundRotation: Double = -3.0
+    @State private var gradientPosition: UnitPoint = UnitPoint(x: -1, y: -1)
     
     @State private var currentTitleIndex: Int = 0
     @State private var titleTimer: Timer?
@@ -48,17 +51,31 @@ struct GeneratingView: View {
                     .resizable()
                     .scaledToFill()
                     .ignoresSafeArea()
+                    .scaleEffect(backgroundScale)
+                    .rotationEffect(.degrees(backgroundRotation))
                     .blur(radius: 40)
                     .overlay(Color.black.opacity(0.55).ignoresSafeArea())
+                    .overlay(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.0),
+                                Color.white.opacity(0.15),
+                                Color.white.opacity(0.0)
+                            ],
+                            startPoint: gradientPosition,
+                            endPoint: UnitPoint(x: gradientPosition.x + 1, y: gradientPosition.y + 1)
+                        )
+                        .blendMode(.plusLighter)
+                        .ignoresSafeArea()
+                    )
             } else {
                 Color.videoBackground
                     .ignoresSafeArea()
             }
             
             VStack(spacing: 0) {
-                // Top bar with close button
-                HStack {
-                    Spacer()
+                // Top bar with close button container
+                ZStack(alignment: .topTrailing) {
                     if canDismiss, let onDismiss = onDismiss {
                         Button {
                             HapticManager.shared.selection()
@@ -76,6 +93,8 @@ struct GeneratingView: View {
                         .transition(.opacity.combined(with: .scale(scale: 0.8)))
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .topTrailing)
+                .frame(height: 32 + VideoSpacing.lg)
                 .animation(.easeInOut(duration: 0.4), value: canDismiss)
                 
                 Spacer()
@@ -111,38 +130,36 @@ struct GeneratingView: View {
                 
                 Spacer()
                 
-                // Continue browsing button (pill style)
-                if canDismiss, let onDismiss = onDismiss {
-                    Button {
-                        HapticManager.shared.mediumImpact()
-                        onDismiss()
-                    } label: {
-                        HStack(spacing: VideoSpacing.xs) {
-                            Image(systemName: "arrow.left")
-                                .font(.system(size: 14, weight: .semibold))
-                            Text("Continue Browsing")
-                                .font(.system(size: 16, weight: .semibold))
-                        }
-                        .foregroundColor(Color(.darkGray))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 15)
-                        .background(Color.white.opacity(0.92))
-                        .clipShape(Capsule())
+                // Continue browsing button container
+                ZStack {
+                    if canDismiss, let onDismiss = onDismiss {
+                        VideoButton(
+                            title: "Continue Browsing",
+                            icon: "arrow.left",
+                            action: {
+                                onDismiss()
+                            },
+                            style: .secondary
+                        )
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
-                    .buttonStyle(ScaleButtonStyle())
-                    .padding(.horizontal, VideoSpacing.screenHorizontal)
-                    .padding(.bottom, VideoSpacing.xxl)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-                } else {
-                    Spacer()
-                        .frame(height: VideoSpacing.xxl)
                 }
+                .frame(height: VideoSpacing.buttonHeight)
+                .padding(.horizontal, VideoSpacing.screenHorizontal)
+                .padding(.bottom, VideoSpacing.xxl)
             }
         }
         .animation(.easeInOut(duration: 0.4), value: canDismiss)
         .onAppear {
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                 pulseScale = 1.15
+            }
+            withAnimation(.easeInOut(duration: 12.0).repeatForever(autoreverses: true)) {
+                backgroundScale = 1.25
+                backgroundRotation = 3.0
+            }
+            withAnimation(.linear(duration: 8.0).repeatForever(autoreverses: false)) {
+                gradientPosition = UnitPoint(x: 2, y: 2)
             }
             startTitleRotation()
         }

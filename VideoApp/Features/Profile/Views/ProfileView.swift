@@ -2,8 +2,7 @@
 //  ProfileView.swift
 //  AIVideo
 //
-//  Profile tab with subscription status and settings
-//  Phase 6: Full implementation
+//  Profile tab — minimal editorial layout
 //
 
 import SwiftUI
@@ -12,32 +11,33 @@ struct ProfileView: View {
     @EnvironmentObject var appState: AppState
     @State private var showPaywall = false
     
+    // Warm accent — a muted sand/gold tone that feels premium without being flashy
+    private let accent = Color(hex: "C8A96E")
+    
     var body: some View {
         ZStack {
             Color.videoBackground.ignoresSafeArea()
             
-            ScrollView {
-                VStack(spacing: VideoSpacing.lg) {
-                    // Subscription card
-                    subscriptionCard
-                        .padding(.horizontal, VideoSpacing.screenHorizontal)
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    if !appState.isPremiumUser {
+                        upgradeCard
+                            .padding(.top, VideoSpacing.xl)
+                    }
                     
-                    // Settings list
-                    settingsList
-                        .padding(.horizontal, VideoSpacing.screenHorizontal)
+                    linksSection
+                        .padding(.top, appState.isPremiumUser ? VideoSpacing.lg : VideoSpacing.xxxl)
                     
-                    // DEBUG: Developer options - Remove before release
                     #if DEBUG
                     debugSection
+                        .padding(.top, VideoSpacing.xxl)
                         .padding(.horizontal, VideoSpacing.screenHorizontal)
                     #endif
                     
-                    // App footer
-                    appFooter
-                        .padding(.top, VideoSpacing.xl)
+                    footerSection
+                        .padding(.top, VideoSpacing.huge)
+                        .padding(.bottom, 120)
                 }
-                .padding(.vertical, VideoSpacing.md)
-                .padding(.bottom, 100) // Space for tab bar
             }
         }
         .navigationTitle("Profile")
@@ -45,249 +45,128 @@ struct ProfileView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         .fullScreenCover(isPresented: $showPaywall) {
             PaywallView(source: .profile) {
-                // Update app state after successful purchase
                 appState.setPremiumStatus(true)
             }
         }
     }
     
-    // MARK: - Subscription Banner
+    // MARK: - Upgrade Card (Free users)
     
-    @ViewBuilder
-    private var subscriptionCard: some View {
-        if appState.isPremiumUser {
-            premiumStatusCard
-        } else {
-            freeUserBanner
-        }
-    }
-    
-    // MARK: Premium user card
-    
-    private var premiumStatusCard: some View {
-        HStack {
-            ZStack {
-                Circle()
-                    .fill(LinearGradient.videoMarketingGradient)
-                    .frame(width: 44, height: 44)
-                
-                Image(systemName: "crown.fill")
-                    .font(.system(size: 20))
-                    .foregroundColor(.videoBlack)
-            }
-            
-            VStack(alignment: .leading, spacing: VideoSpacing.xxs) {
-                Text("Premium")
-                    .font(.videoHeadline)
-                    .foregroundColor(.videoTextPrimary)
-                
-                if let remaining = appState.generationsRemaining,
-                   let limit = appState.generationLimit {
-                    let used = limit - remaining
-                    Text("\(used) of \(limit) videos used this period")
-                        .font(.videoCaption)
-                        .foregroundColor(.videoAccent)
-                } else {
-                    Text("Premium Plan")
-                        .font(.videoCaption)
-                        .foregroundColor(.videoAccent)
-                }
-            }
-            
-            Spacer()
-            
-            if let remaining = appState.generationsRemaining,
-               let limit = appState.generationLimit, limit > 0 {
-                let used = limit - remaining
-                let progress = CGFloat(used) / CGFloat(limit)
-                ZStack {
-                    Circle()
-                        .stroke(Color.videoAccent.opacity(0.3), lineWidth: 4)
-                        .frame(width: 50, height: 50)
-                    
-                    Circle()
-                        .trim(from: 0, to: min(progress, 1.0))
-                        .stroke(Color.videoAccent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                        .frame(width: 50, height: 50)
-                        .rotationEffect(.degrees(-90))
-                    
-                    Text("\(remaining)")
-                        .font(.videoSubheadline)
-                        .foregroundColor(.videoTextPrimary)
-                }
-            }
-        }
-        .padding(VideoSpacing.cardPadding)
-        .background(
-            RoundedRectangle(cornerRadius: VideoSpacing.radiusMedium)
-                .fill(Color.videoSurface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: VideoSpacing.radiusMedium)
-                .stroke(Color.videoAccent.opacity(0.3), lineWidth: 1)
-        )
-    }
-    
-    // MARK: Free user upsell banner
-    
-    private var freeUserBanner: some View {
-        Button {
-            showPaywall = true
-        } label: {
+    private var upgradeCard: some View {
+        Button { showPaywall = true } label: {
             VStack(spacing: VideoSpacing.lg) {
-                // Crown icon + title
-                VStack(spacing: VideoSpacing.xs) {
-                    ZStack {
-                        Circle()
-                            .fill(LinearGradient.videoMarketingGradient)
-                            .frame(width: 56, height: 56)
-                            .shadow(color: Color.videoAccent.opacity(0.4), radius: 12, x: 0, y: 0)
-                        
-                        Image(systemName: "crown.fill")
-                            .font(.system(size: 26))
-                            .foregroundColor(.videoBlack)
-                    }
-                    
-                    Text("Go Premium")
+                VStack(spacing: 6) {
+                    Text("Get More from Your Videos")
                         .font(.videoHeadline)
-                        .foregroundColor(.videoTextPrimary)
+                        .foregroundColor(.white)
                     
-                    Text("Create stunning videos with AI")
+                    Text("HD video  ·  40 generations  ·  All effects")
                         .font(.videoCaption)
-                        .foregroundColor(.videoTextSecondary)
+                        .foregroundColor(.white.opacity(0.45))
+                        .tracking(0.3)
                 }
                 
-                // Benefit rows
-                VStack(alignment: .leading, spacing: VideoSpacing.sm) {
-                    premiumBenefitRow(icon: "video.badge.plus", text: "Up to 40 Generations")
-                    premiumBenefitRow(icon: "flame.fill", text: "Trending Templates")
-                    premiumBenefitRow(icon: "sparkles", text: "HD Quality Output")
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, VideoSpacing.xs)
-                
-                // CTA
                 HStack(spacing: VideoSpacing.xs) {
                     Text("Go Premium")
                         .font(.videoBody)
                         .fontWeight(.semibold)
-                    
                     Image(systemName: "arrow.right")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                 }
                 .foregroundColor(.videoBlack)
                 .frame(maxWidth: .infinity)
                 .frame(height: VideoSpacing.buttonHeight)
                 .background(
                     RoundedRectangle(cornerRadius: VideoSpacing.radiusSmall)
-                        .fill(LinearGradient.videoMarketingGradient)
+                        .fill(accent)
                 )
             }
-            .padding(VideoSpacing.lg)
+            .padding(VideoSpacing.xl)
             .background(
-                ZStack {
-                    RoundedRectangle(cornerRadius: VideoSpacing.radiusLarge)
-                        .fill(Color.videoSurface)
-                    
-                    // Subtle accent glow in the top-right
-                    RoundedRectangle(cornerRadius: VideoSpacing.radiusLarge)
-                        .fill(
-                            RadialGradient(
-                                colors: [Color.videoAccent.opacity(0.08), Color.clear],
-                                center: .topTrailing,
-                                startRadius: 0,
-                                endRadius: 250
-                            )
-                        )
-                }
+                RoundedRectangle(cornerRadius: VideoSpacing.radiusLarge)
+                    .fill(Color.videoSurface)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: VideoSpacing.radiusLarge)
-                    .stroke(Color.videoAccent.opacity(0.25), lineWidth: 1)
+                    .stroke(accent.opacity(0.15), lineWidth: 1)
             )
         }
         .buttonStyle(ScaleButtonStyle())
+        .padding(.horizontal, VideoSpacing.screenHorizontal)
     }
     
-    private func premiumBenefitRow(icon: String, text: String) -> some View {
-        HStack(spacing: VideoSpacing.sm) {
-            ZStack {
-                Circle()
-                    .fill(Color.videoAccent.opacity(0.15))
-                    .frame(width: 32, height: 32)
-                
-                Image(systemName: icon)
-                    .font(.system(size: 14))
-                    .foregroundColor(.videoAccent)
+    // MARK: - Links
+    
+    private var linksSection: some View {
+        VStack(spacing: 0) {
+            linkRow(title: "Rate the App", icon: "star") {
+                Analytics.track(.rateAppTapped)
+                openURL(ExternalURLs.appStoreReview)
             }
             
-            Text(text)
-                .font(.videoSubheadline)
-                .foregroundColor(.videoTextPrimary)
-        }
-    }
-    
-    private var settingsList: some View {
-        VideoCard(padding: 0) {
-            VStack(spacing: 0) {
-                settingsRow(icon: "star.fill", title: "Rate the App") {
-                    Analytics.track(.rateAppTapped)
-                    openURL(ExternalURLs.appStoreReview)
-                }
-                
-                Divider().background(Color.videoTextTertiary.opacity(0.3))
-                
-                settingsRow(icon: "envelope.fill", title: "Contact Support") {
-                    Analytics.track(.contactSupportTapped)
-                    openURL(ExternalURLs.support)
-                }
-                
-                Divider().background(Color.videoTextTertiary.opacity(0.3))
-                
-                settingsRow(icon: "doc.text.fill", title: "Privacy Policy") {
-                    openURL(ExternalURLs.privacyPolicy)
-                }
-                
-                Divider().background(Color.videoTextTertiary.opacity(0.3))
-                
-                settingsRow(icon: "doc.text.fill", title: "Terms of Use") {
-                    openURL(ExternalURLs.termsOfUse)
-                }
+            linkDivider
+            
+            linkRow(title: "Contact Support", icon: "envelope") {
+                Analytics.track(.contactSupportTapped)
+                openURL(ExternalURLs.support)
+            }
+            
+            linkDivider
+            
+            linkRow(title: "Privacy Policy", icon: "lock.shield") {
+                openURL(ExternalURLs.privacyPolicy)
+            }
+            
+            linkDivider
+            
+            linkRow(title: "Terms of Use", icon: "doc.plaintext") {
+                openURL(ExternalURLs.termsOfUse)
             }
         }
+        .padding(.horizontal, VideoSpacing.screenHorizontal)
     }
     
-    private func settingsRow(icon: String, title: String, action: @escaping () -> Void) -> some View {
+    private func linkRow(title: String, icon: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack {
+            HStack(spacing: VideoSpacing.sm) {
                 Image(systemName: icon)
-                    .foregroundColor(.videoAccent)
-                    .frame(width: 24)
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundColor(.white.opacity(0.35))
+                    .frame(width: 26)
                 
                 Text(title)
                     .font(.videoBody)
-                    .foregroundColor(.videoTextPrimary)
+                    .foregroundColor(.white.opacity(0.8))
                 
                 Spacer()
                 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.videoTextTertiary)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.2))
             }
-            .padding(.horizontal, VideoSpacing.md)
             .padding(.vertical, VideoSpacing.lg)
         }
     }
     
-    private var appFooter: some View {
-        VStack(spacing: VideoSpacing.xs) {
-            Text("\(BrandConfig.appName) v\(Bundle.main.appVersion)")
+    private var linkDivider: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.06))
+            .frame(height: 1)
+            .padding(.leading, 40)
+    }
+    
+    // MARK: - Footer
+    
+    private var footerSection: some View {
+        VStack(spacing: 4) {
+            Text(BrandConfig.appName)
                 .font(.videoCaption)
-                .foregroundColor(.videoTextTertiary)
+                .foregroundColor(.white.opacity(0.2))
+                .tracking(1.5)
             
-            Text(BrandConfig.appFooterMessage)
-                .font(.videoCaption)
-                .foregroundColor(.videoTextTertiary)
+            Text("v\(Bundle.main.appVersion)")
+                .font(.system(size: 10, weight: .regular))
+                .foregroundColor(.white.opacity(0.15))
         }
     }
     
@@ -295,57 +174,46 @@ struct ProfileView: View {
     #if DEBUG
     private var debugSection: some View {
         VStack(alignment: .leading, spacing: VideoSpacing.sm) {
-            Text("🛠 DEBUG OPTIONS")
-                .font(.videoCaptionSmall)
-                .foregroundColor(.orange)
-                .padding(.leading, VideoSpacing.xs)
+            Text("DEBUG")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundColor(.orange.opacity(0.6))
+                .tracking(1)
             
-            VideoCard(padding: 0) {
-                VStack(spacing: 0) {
-                    // Simulate Premium Toggle
+            VStack(spacing: 0) {
+                HStack {
+                    Text("Simulate Premium")
+                        .font(.videoBodySmall)
+                        .foregroundColor(.videoTextPrimary)
+                    Spacer()
+                    Toggle("", isOn: $appState.debugSimulatePremium)
+                        .labelsHidden()
+                        .tint(.orange)
+                }
+                .padding(.horizontal, VideoSpacing.md)
+                .padding(.vertical, VideoSpacing.sm)
+                
+                Rectangle().fill(Color.orange.opacity(0.15)).frame(height: 1)
+                
+                Button {
+                    appState.resetOnboarding()
+                } label: {
                     HStack {
-                        Image(systemName: "crown.fill")
-                            .foregroundColor(.orange)
-                            .frame(width: 24)
-                        
-                        Text("Simulate Premium")
-                            .font(.videoBody)
+                        Text("Reset Onboarding")
+                            .font(.videoBodySmall)
                             .foregroundColor(.videoTextPrimary)
-                        
                         Spacer()
-                        
-                        Toggle("", isOn: $appState.debugSimulatePremium)
-                            .labelsHidden()
-                            .tint(.orange)
                     }
                     .padding(.horizontal, VideoSpacing.md)
-                    .padding(.vertical, VideoSpacing.sm + 2)
-                    
-                    Divider().background(Color.orange.opacity(0.3))
-                    
-                    // Reset Onboarding
-                    Button {
-                        appState.resetOnboarding()
-                    } label: {
-                        HStack {
-                            Image(systemName: "arrow.counterclockwise")
-                                .foregroundColor(.orange)
-                                .frame(width: 24)
-                            
-                            Text("Reset Onboarding")
-                                .font(.videoBody)
-                                .foregroundColor(.videoTextPrimary)
-                            
-                            Spacer()
-                        }
-                        .padding(.horizontal, VideoSpacing.md)
-                        .padding(.vertical, VideoSpacing.sm + 2)
-                    }
+                    .padding(.vertical, VideoSpacing.sm)
                 }
             }
+            .background(
+                RoundedRectangle(cornerRadius: VideoSpacing.radiusMedium)
+                    .fill(Color.videoSurface)
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: VideoSpacing.radiusMedium)
-                    .stroke(Color.orange.opacity(0.5), lineWidth: 1)
+                    .stroke(Color.orange.opacity(0.2), lineWidth: 1)
             )
         }
     }

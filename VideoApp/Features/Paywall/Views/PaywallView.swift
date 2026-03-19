@@ -119,10 +119,9 @@ struct PaywallView: View {
     
     private var headerSection: some View {
         VStack(spacing: VideoSpacing.xs) {
-            // Crown icon with marketing gradient (smaller)
             ZStack {
                 Circle()
-                    .fill(LinearGradient.videoMarketingGradient)
+                    .fill(Color.videoWhite)
                     .frame(width: 50, height: 50)
                 
                 Image(systemName: "crown.fill")
@@ -255,7 +254,7 @@ struct PaywallView: View {
                         .foregroundColor(isSelected ? .videoBlack : .white)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(isSelected ? LinearGradient.videoMarketingGradient : LinearGradient(colors: [Color.gray], startPoint: .leading, endPoint: .trailing))
+                        .background(isSelected ? Color.videoWhite : Color.gray)
                         .cornerRadius(4)
                         .padding(.trailing, 12) // 10% gap from right edge
                         .offset(y: -10)

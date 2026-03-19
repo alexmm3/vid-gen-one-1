@@ -2,7 +2,8 @@
 //  HistoryListView.swift
 //  AIVideo
 //
-//  My Videos list showing past and pending generations
+//  My Videos list showing past and pending generations.
+//  Uses iOS 18 .zoom transition for seamless hero animation from card → fullscreen.
 //
 
 import SwiftUI
@@ -11,10 +12,9 @@ struct HistoryListView: View {
     @StateObject private var viewModel = HistoryViewModel()
     @ObservedObject private var activeGenerationManager = ActiveGenerationManager.shared
     
-    // Navigation state for lazy destination loading
     @State private var selectedGeneration: LocalGeneration?
+    @Namespace private var heroNamespace
     
-    /// Direct check for pending generation from the singleton
     private var hasPending: Bool {
         activeGenerationManager.pendingGeneration != nil
     }
@@ -32,23 +32,21 @@ struct HistoryListView: View {
         .navigationTitle("My Videos")
         .navigationBarTitleDisplayMode(.large)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .fullScreenCover(item: $selectedGeneration) { generation in
+            HistoryDetailView(generation: generation, namespace: heroNamespace)
+                .heroZoomTarget(sourceID: generation.id, in: heroNamespace)
+        }
         .onAppear {
             viewModel.trackHistoryViewed()
-            // Force sync with ActiveGenerationManager on appear
             viewModel.syncPendingGeneration()
         }
         .task {
-            // Sync history from server, then check pending status
             await viewModel.syncHistory()
             await viewModel.refreshPendingStatus()
         }
         .refreshable {
             await viewModel.syncHistory()
             await viewModel.refreshPendingStatus()
-        }
-        // Lazy navigation destination - only creates HistoryDetailView when needed
-        .navigationDestination(item: $selectedGeneration) { generation in
-            HistoryDetailView(generation: generation)
         }
     }
     
@@ -85,38 +83,47 @@ struct HistoryListView: View {
                 GridItem(.flexible(), spacing: VideoSpacing.sm),
                 GridItem(.flexible(), spacing: VideoSpacing.sm)
             ], spacing: VideoSpacing.sm) {
-                // Pending generation card (if any) - shown as first item in grid
                 if let pending = activeGenerationManager.pendingGeneration {
                     pendingGenerationCard(pending)
                 }
                 
-                // Completed generations - uses lazy navigation via Button + navigationDestination
                 ForEach(viewModel.generations) { generation in
                     Button {
+                        HapticManager.shared.lightImpact()
                         selectedGeneration = generation
                     } label: {
                         HistoryItemCard(generation: generation)
+                            .heroZoomSource(id: generation.id, in: heroNamespace)
                     }
                     .buttonStyle(ScaleButtonStyle())
                 }
             }
             .padding(.horizontal, VideoSpacing.screenHorizontal)
             .padding(.top, VideoSpacing.sm)
-            .padding(.bottom, 100) // Space for tab bar
+            .padding(.bottom, 100)
         }
     }
     
     // MARK: - Pending Generation Card
-    // Matches the same size as completed video cards (9/16 aspect ratio)
-    // Shows blurred user photo with centered spinner
     
     private func pendingGenerationCard(_ pending: PendingGeneration) -> some View {
         PendingGenerationCardView(pending: pending)
     }
 }
 
+// MARK: - Zoom Transition Helpers
+
+extension View {
+    func heroZoomSource(id: some Hashable, in namespace: Namespace.ID) -> some View {
+        self.matchedTransitionSource(id: id, in: namespace)
+    }
+    
+    func heroZoomTarget(sourceID: some Hashable, in namespace: Namespace.ID) -> some View {
+        self.navigationTransition(.zoom(sourceID: sourceID, in: namespace))
+    }
+}
+
 // MARK: - Pending Generation Card View
-// Extracted to its own struct for clarity
 
 private struct PendingGenerationCardView: View {
     let pending: PendingGeneration
@@ -126,7 +133,6 @@ private struct PendingGenerationCardView: View {
             .aspectRatio(9/16, contentMode: .fit)
             .overlay {
                 ZStack {
-                    // Blurred user photo background
                     CachedAsyncImage(
                         url: URL(string: pending.inputImageUrl)
                     ) { image in
@@ -138,13 +144,11 @@ private struct PendingGenerationCardView: View {
                         Color.videoSurface
                     }
                     
-                    // Dark overlay to ensure text readability on bright photos
                     Color.black.opacity(0.3)
                     
-                    // Centered generating indicator
                     VStack(spacing: VideoSpacing.md) {
                         ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .videoAccent))
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
                             .scaleEffect(1.3)
                         
                         Text("Generating...")

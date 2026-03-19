@@ -65,8 +65,8 @@ enum VideoSpacing {
     
     // MARK: - Corner Radius
     
-    /// Small radius for buttons
-    static let radiusSmall: CGFloat = 8
+    /// Small radius for buttons (pill-ish)
+    static let radiusSmall: CGFloat = 14
     
     /// Medium radius for cards
     static let radiusMedium: CGFloat = 12
@@ -136,7 +136,7 @@ extension View {
 struct VideoShadow {
     /// Subtle shadow for cards on dark background
     static let card = Shadow(
-        color: Color.black.opacity(0.3),
+        color: Color.black.opacity(0.15),
         radius: 12,
         x: 0,
         y: 4
@@ -144,15 +144,15 @@ struct VideoShadow {
     
     /// Elevated shadow for floating elements
     static let elevated = Shadow(
-        color: Color.black.opacity(0.4),
+        color: Color.black.opacity(0.2),
         radius: 20,
         x: 0,
         y: 8
     )
     
-    /// Glow effect for accent elements
+    /// Soft neutral glow (replaces accent glow)
     static let glow = Shadow(
-        color: Color.videoAccent.opacity(0.3),
+        color: Color.white.opacity(0.06),
         radius: 16,
         x: 0,
         y: 0

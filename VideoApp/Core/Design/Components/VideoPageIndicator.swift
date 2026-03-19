@@ -10,8 +10,8 @@ import SwiftUI
 struct VideoPageIndicator: View {
     let totalPages: Int
     @Binding var currentPage: Int
-    var activeColor: Color = .videoAccent
-    var inactiveColor: Color = .videoTextTertiary
+    var activeColor: Color = .white
+    var inactiveColor: Color = .white.opacity(0.3)
     
     var body: some View {
         HStack(spacing: 8) {
@@ -19,8 +19,8 @@ struct VideoPageIndicator: View {
                 Capsule()
                     .fill(index == currentPage ? activeColor : inactiveColor)
                     .frame(
-                        width: index == currentPage ? 24 : 8,
-                        height: 8
+                        width: index == currentPage ? 20 : 6,
+                        height: 6
                     )
                     .animation(.easeInOut(duration: 0.3), value: currentPage)
             }
@@ -33,8 +33,8 @@ struct VideoPageIndicator: View {
 struct VideoDotIndicator: View {
     let totalPages: Int
     @Binding var currentPage: Int
-    var activeColor: Color = .videoAccent
-    var inactiveColor: Color = .videoTextTertiary
+    var activeColor: Color = .white
+    var inactiveColor: Color = .white.opacity(0.3)
     
     var body: some View {
         HStack(spacing: 10) {

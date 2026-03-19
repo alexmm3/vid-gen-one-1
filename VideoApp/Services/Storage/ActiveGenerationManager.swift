@@ -25,9 +25,13 @@ struct PendingGeneration: Codable, Equatable {
     var status: String  // "uploading", "processing", "polling"
     
     var isExpired: Bool {
+        // If it's still uploading after 5 minutes, it probably crashed/failed silently
+        if status == "uploading" {
+            return Date().timeIntervalSince(startedAt) > 300
+        }
         // Consider expired after 30 minutes (backend may take a while for complex generations)
         // This is a safety net for abandoned generations, not a timeout
-        Date().timeIntervalSince(startedAt) > 1800
+        return Date().timeIntervalSince(startedAt) > 1800
     }
     
     var displayStatus: String {
@@ -82,6 +86,65 @@ final class ActiveGenerationManager: ObservableObject {
     
     // MARK: - Public Methods
     
+    /// Start tracking a generation that is currently uploading
+    func startUploading(
+        templateName: String,
+        templateId: String?,
+        referenceVideoUrl: String
+    ) {
+        let pending = PendingGeneration(
+            generationId: "uploading-\(UUID().uuidString)",
+            fetchId: nil,
+            templateName: templateName,
+            templateId: templateId,
+            inputImageUrl: "", // Not uploaded yet
+            referenceVideoUrl: referenceVideoUrl,
+            startedAt: Date(),
+            lastPolledAt: nil,
+            pollCount: 0,
+            status: "uploading"
+        )
+        
+        pendingGeneration = pending
+        savePendingGeneration()
+        print("✅ ActiveGenerationManager: Started tracking upload phase")
+    }
+    
+    /// Update an uploading generation with the real ID from the backend
+    func transitionToProcessing(
+        generationId: String,
+        fetchId: Int?,
+        inputImageUrl: String
+    ) {
+        guard let pending = pendingGeneration, pending.status == "uploading" else { return }
+        
+        let updated = PendingGeneration(
+            generationId: generationId,
+            fetchId: fetchId,
+            templateName: pending.templateName,
+            templateId: pending.templateId,
+            inputImageUrl: inputImageUrl,
+            referenceVideoUrl: pending.referenceVideoUrl,
+            startedAt: pending.startedAt,
+            lastPolledAt: Date(),
+            pollCount: 0,
+            status: "processing"
+        )
+        
+        pendingGeneration = updated
+        savePendingGeneration()
+        
+        print("✅ ActiveGenerationManager: Transitioned to processing \(generationId)")
+        
+        Analytics.track(.generationPollingStarted(generationId: generationId))
+        
+        NotificationCenter.default.post(
+            name: .generationStarted,
+            object: nil,
+            userInfo: ["generationId": generationId]
+        )
+    }
+    
     /// Start tracking a new generation
     func startGeneration(
         generationId: String,
@@ -135,7 +198,10 @@ final class ActiveGenerationManager: ObservableObject {
         print("🔄 ActiveGenerationManager: Starting background polling + Realtime subscription")
         
         // Subscribe to Realtime for near-instant updates (primary detection)
-        subscribeToGenerationUpdates(generationId: pending.generationId)
+        // Only if we have a real generation ID (not in upload phase)
+        if pending.status != "uploading" {
+            subscribeToGenerationUpdates(generationId: pending.generationId)
+        }
         
         // Start slow fallback polling in a detached task (safety net)
         pollingTask = Task { [weak self] in
@@ -276,6 +342,11 @@ final class ActiveGenerationManager: ObservableObject {
             Analytics.track(.generationExpired(generationId: pending.generationId))
             clearPendingGeneration()
             return .expired
+        }
+        
+        // If it's still in the upload phase, we can't check the backend yet
+        if pending.status == "uploading" {
+            return .stillProcessing(pollCount: pending.pollCount)
         }
         
         isCheckingPending = true

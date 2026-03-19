@@ -53,7 +53,7 @@ struct HistoryItemCard: View {
                                 .foregroundColor(.videoBlack)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 3)
-                                .background(Color.videoAccent)
+                                .background(Color.white)
                                 .cornerRadius(4)
                                 .padding(VideoSpacing.xs)
                         }

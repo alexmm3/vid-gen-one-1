@@ -67,10 +67,10 @@ struct VideoButton: View {
         switch style {
         case .primary:
             RoundedRectangle(cornerRadius: VideoSpacing.radiusSmall)
-                .fill(LinearGradient.videoAccentGradient)
+                .fill(Color.videoWhite)
         case .secondary:
             RoundedRectangle(cornerRadius: VideoSpacing.radiusSmall)
-                .stroke(Color.videoAccent, lineWidth: 1.5)
+                .stroke(Color.white.opacity(0.25), lineWidth: 1)
                 .background(
                     RoundedRectangle(cornerRadius: VideoSpacing.radiusSmall)
                         .fill(Color.clear)
@@ -79,10 +79,10 @@ struct VideoButton: View {
             Color.clear
         case .inverted:
             RoundedRectangle(cornerRadius: VideoSpacing.radiusSmall)
-                .fill(Color.videoWhite)
+                .fill(Color.videoBlack)
         case .marketing:
             RoundedRectangle(cornerRadius: VideoSpacing.radiusSmall)
-                .fill(LinearGradient.videoMarketingGradient)
+                .fill(Color.videoWhite)
         }
     }
     
@@ -91,11 +91,11 @@ struct VideoButton: View {
         case .primary:
             return .videoBlack
         case .secondary:
-            return .videoAccent
+            return .videoTextPrimary
         case .ghost:
             return .videoTextPrimary
         case .inverted:
-            return .videoBlack
+            return .videoWhite
         case .marketing:
             return .videoBlack
         }
@@ -139,18 +139,22 @@ struct VideoSmallButton: View {
         switch style {
         case .primary:
             RoundedRectangle(cornerRadius: VideoSpacing.radiusSmall)
-                .fill(LinearGradient.videoAccentGradient)
+                .fill(Color.videoWhite)
         case .secondary:
             RoundedRectangle(cornerRadius: VideoSpacing.radiusSmall)
-                .stroke(Color.videoTextTertiary, lineWidth: 1)
+                .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                .background(
+                    RoundedRectangle(cornerRadius: VideoSpacing.radiusSmall)
+                        .fill(Color.clear)
+                )
         case .ghost:
             Color.clear
         case .inverted:
             RoundedRectangle(cornerRadius: VideoSpacing.radiusSmall)
-                .fill(Color.videoWhite)
+                .fill(Color.videoBlack)
         case .marketing:
             RoundedRectangle(cornerRadius: VideoSpacing.radiusSmall)
-                .fill(LinearGradient.videoMarketingGradient)
+                .fill(Color.videoWhite)
         }
     }
     
@@ -163,7 +167,7 @@ struct VideoSmallButton: View {
         case .ghost:
             return .videoTextPrimary
         case .inverted:
-            return .videoBlack
+            return .videoWhite
         case .marketing:
             return .videoBlack
         }
@@ -205,10 +209,10 @@ struct VideoIconButton: View {
             Color.clear
         case .filled:
             Circle()
-                .fill(LinearGradient.videoAccentGradient)
+                .fill(Color.videoWhite)
         case .outlined:
             Circle()
-                .stroke(Color.videoTextTertiary, lineWidth: 1)
+                .stroke(Color.white.opacity(0.25), lineWidth: 1)
                 .background(Circle().fill(Color.videoSurface))
         }
     }
