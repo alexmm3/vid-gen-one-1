@@ -132,6 +132,10 @@ final class GenerationViewModel: ObservableObject {
     /// Generation continues in background after submission
     func generate(photo: UIImage, template: VideoTemplate) async {
         guard !isGenerating else { return }
+        guard AppState.shared.isPremiumUser else {
+            showPaywall = true
+            return
+        }
         guard activeGenerationManager.canStartNewGeneration() else { return }
         
         isGenerating = true
@@ -209,6 +213,10 @@ final class GenerationViewModel: ObservableObject {
     /// Start effect-based generation (generate-video backend) - non-blocking
     func generateEffect(primaryPhoto: UIImage, secondaryPhoto: UIImage?, userPrompt: String?, effect: Effect) async {
         guard !isGenerating else { return }
+        guard AppState.shared.isPremiumUser else {
+            showPaywall = true
+            return
+        }
         guard activeGenerationManager.canStartNewGeneration() else { return }
 
         isGenerating = true
@@ -271,6 +279,10 @@ final class GenerationViewModel: ObservableObject {
     /// Generate with a custom video URL (for custom templates) - non-blocking
     func generateWithCustomVideo(photo: UIImage, videoUrl: String, templateName: String) async {
         guard !isGenerating else { return }
+        guard AppState.shared.isPremiumUser else {
+            showPaywall = true
+            return
+        }
         guard activeGenerationManager.canStartNewGeneration() else { return }
         
         isGenerating = true

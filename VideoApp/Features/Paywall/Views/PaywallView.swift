@@ -145,7 +145,12 @@ struct PaywallView: View {
     
     private var benefitsSection: some View {
         VStack(alignment: .leading, spacing: VideoSpacing.md) {
-            benefitRow(icon: "video.badge.plus", title: "Up to 40 Generations", subtitle: "Available with the yearly plan")
+            benefitRow(
+                icon: "video.badge.plus",
+                title: viewModel.planInfo(for: .monthly)
+                    .map { "Up to \($0.generationLimit) Generations" } ?? "Up to 50 Generations",
+                subtitle: "Available with the monthly plan"
+            )
             benefitRow(icon: "bolt.fill", title: "Priority Processing", subtitle: "Faster generation times")
             benefitRow(icon: "flame.fill", title: "Trending Effects", subtitle: "Access exclusive AI effects")
             benefitRow(icon: "sparkles", title: "HD Quality", subtitle: "High quality video output")
@@ -193,7 +198,7 @@ struct PaywallView: View {
     
     private func pricingCard(for plan: SubscriptionPlan) -> some View {
         let isSelected = viewModel.selectedPlan == plan
-        let product = plan == .weekly ? viewModel.weeklyProduct : viewModel.yearlyProduct
+        let product = plan == .weekly ? viewModel.weeklyProduct : viewModel.monthlyProduct
         let planInfo = viewModel.planInfo(for: plan)
         let limitDescription = planInfo?.limitDescription ?? plan.defaultLimitDescription
         
@@ -212,7 +217,7 @@ struct PaywallView: View {
                         .foregroundColor(.videoMarketing)
                     
                     if let product = product {
-                        Text(product.displayPrice + (plan == .yearly ? "/year" : "/week"))
+                        Text(product.displayPrice + (plan == .monthly ? "/month" : "/week"))
                             .font(.videoCaption)
                             .foregroundColor(.white.opacity(0.7))
                     }
@@ -247,14 +252,14 @@ struct PaywallView: View {
             )
             .overlay(alignment: .topTrailing) {
                 // Best Value badge on upper right edge
-                if plan == .yearly {
+                if plan == .monthly {
                     Text("Best Value")
                         .font(.videoCaptionSmall)
                         .fontWeight(.semibold)
-                        .foregroundColor(isSelected ? .videoBlack : .white)
+                        .foregroundColor(.videoBlack)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(isSelected ? Color.videoWhite : Color.gray)
+                        .background(Color(hex: "C8A96E"))
                         .cornerRadius(4)
                         .padding(.trailing, 12) // 10% gap from right edge
                         .offset(y: -10)

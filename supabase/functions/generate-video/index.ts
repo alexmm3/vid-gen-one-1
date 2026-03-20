@@ -235,7 +235,7 @@ serve(async (req) => {
 
     const shouldEnforceLimit =
       typeof subscriptionCheck.generationLimit === "number" &&
-      typeof subscriptionCheck.periodDays === "number";
+      typeof subscriptionCheck.periodStart === "string";
 
     const { data: reservation, error: reservationError } = await supabase
       .rpc("reserve_generation_slot", {
@@ -257,7 +257,7 @@ serve(async (req) => {
         p_error_log: [],
         p_enforce_limit: shouldEnforceLimit,
         p_generation_limit: subscriptionCheck.generationLimit ?? null,
-        p_period_days: subscriptionCheck.periodDays ?? null,
+        p_period_start: subscriptionCheck.periodStart ?? null,
       })
       .single();
 

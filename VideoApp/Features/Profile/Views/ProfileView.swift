@@ -20,13 +20,16 @@ struct ProfileView: View {
             
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
-                    if !appState.isPremiumUser {
+                    if appState.isPremiumUser, appState.generationLimit != nil {
+                        quotaCard
+                            .padding(.top, VideoSpacing.xl)
+                    } else if !appState.isPremiumUser {
                         upgradeCard
                             .padding(.top, VideoSpacing.xl)
                     }
                     
                     linksSection
-                        .padding(.top, appState.isPremiumUser ? VideoSpacing.lg : VideoSpacing.xxxl)
+                        .padding(.top, VideoSpacing.xxxl)
                     
                     #if DEBUG
                     debugSection
@@ -60,7 +63,7 @@ struct ProfileView: View {
                         .font(.videoHeadline)
                         .foregroundColor(.white)
                     
-                    Text("HD video  ·  40 generations  ·  All effects")
+                    Text("HD video  ·  All effects  ·  Priority processing")
                         .font(.videoCaption)
                         .foregroundColor(.white.opacity(0.45))
                         .tracking(0.3)
@@ -94,7 +97,75 @@ struct ProfileView: View {
         .buttonStyle(ScaleButtonStyle())
         .padding(.horizontal, VideoSpacing.screenHorizontal)
     }
-    
+
+    // MARK: - Quota Card (Subscribers)
+
+    private var quotaCard: some View {
+        let limit = appState.generationLimit ?? 0
+        let used = appState.generationsUsed ?? 0
+        let progress = limit > 0 ? Double(used) / Double(limit) : 0
+        let isExhausted = used >= limit && limit > 0
+
+        return VStack(spacing: VideoSpacing.md) {
+            // Header
+            HStack {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14))
+                    .foregroundColor(accent)
+
+                Text(isExhausted ? "Generations used up" : "\(used) of \(limit) generations")
+                    .font(.videoSubheadline)
+                    .foregroundColor(.white)
+
+                Spacer()
+            }
+
+            // Progress bar
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.white.opacity(0.1))
+                        .frame(height: 8)
+
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(
+                            LinearGradient(
+                                colors: [accent.opacity(0.8), accent],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(
+                            width: max(0, geometry.size.width * min(progress, 1.0)),
+                            height: 8
+                        )
+                        .animation(.easeInOut(duration: 0.3), value: progress)
+                }
+            }
+            .frame(height: 8)
+
+            // Reset date
+            if let expiresAt = appState.subscriptionExpiresAt {
+                HStack {
+                    Text("Resets on \(expiresAt.formatted(.dateTime.month(.abbreviated).day()))")
+                        .font(.videoCaption)
+                        .foregroundColor(.white.opacity(0.45))
+                    Spacer()
+                }
+            }
+        }
+        .padding(VideoSpacing.xl)
+        .background(
+            RoundedRectangle(cornerRadius: VideoSpacing.radiusLarge)
+                .fill(Color.videoSurface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: VideoSpacing.radiusLarge)
+                .stroke(accent.opacity(0.15), lineWidth: 1)
+        )
+        .padding(.horizontal, VideoSpacing.screenHorizontal)
+    }
+
     // MARK: - Links
     
     private var linksSection: some View {

@@ -32,7 +32,7 @@ final class SubscriptionPlanService: ObservableObject {
         
         do {
             // Using direct REST API call
-            let url = URL(string: "\(Secrets.supabaseUrl)/rest/v1/subscription_plans?is_active=eq.true&order=price_cents.asc")!
+            let url = URL(string: "\(Secrets.supabaseUrl)/rest/v1/subscription_plans?is_active=eq.true&order=period_days.asc")!
             
             var request = URLRequest(url: url)
             request.httpMethod = "GET"
@@ -87,7 +87,6 @@ struct SubscriptionPlanInfo: Identifiable, Codable, Equatable {
     let periodDays: Int?
     let appleProductId: String?
     let isActive: Bool
-    let priceCents: Int?
     let description: String?
     
     /// Human-readable limit description (e.g., "10 videos")

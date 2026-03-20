@@ -26,13 +26,13 @@ enum BrandConfig {
     // MARK: - App Store Connect
     // TODO: Fill in when App Store Connect entry is created
 
-    static let appStoreId = ""
+    static let appStoreId = "6760908642"
 
-    static let weeklyProductId = ""
-    static let yearlyProductId = ""
+    static let weeklyProductId = "com.alexm.videoeffects1.weekly_pro"
+    static let monthlyProductId = "com.alexm.videoeffects1.monthly_pro"
 
     static var allProductIds: [String] {
-        [weeklyProductId, yearlyProductId]
+        [weeklyProductId, monthlyProductId]
     }
 
     // MARK: - Support & Legal

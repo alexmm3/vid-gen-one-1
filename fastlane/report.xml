@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="fastlane.lanes">
+    
+    
+    
+      
+      <testcase classname="fastlane.lanes" name="0: default_platform" time="0.000177">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="1: app_store_connect_api_key" time="0.002376">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="2: latest_testflight_build_number" time="1.705931">
+        
+      </testcase>
+    
+      
+      <testcase classname="fastlane.lanes" name="3: build_app" time="110.223547">
+        
+      </testcase>
+    
+  </testsuite>
+</testsuites>

@@ -16,6 +16,8 @@ export interface SubscriptionCheckResult {
   periodDays?: number | null;
   generationsUsed?: number;
   generationsRemaining?: number;
+  periodStart?: string;   // ISO date string for billing period start
+  expiresAt?: string;     // ISO date string for subscription expiry
   error?: string;
   errorCode?: "NO_SUBSCRIPTION" | "SUBSCRIPTION_EXPIRED" | "LIMIT_REACHED";
 }
@@ -70,9 +72,8 @@ export async function getSubscriptionAccessOverride(
 async function countGenerationsInPeriod(
   supabase: SupabaseClient,
   deviceUuid: string,
-  periodDays: number
+  periodStart: Date
 ): Promise<number> {
-  const periodStart = new Date(Date.now() - (periodDays * 24 * 60 * 60 * 1000));
   const { count } = await supabase
     .from("generations")
     .select("*", { count: "exact", head: true })
@@ -85,13 +86,16 @@ export async function getGenerationUsage(
   supabase: SupabaseClient,
   deviceUuid: string,
   generationLimit: number,
-  periodDays: number | null
+  periodDays: number | null,
+  expiresAt: string | null
 ): Promise<{ used: number; remaining: number }> {
-  if (periodDays === null) {
+  if (periodDays === null || !expiresAt) {
     return { used: 0, remaining: -1 };
   }
 
-  const used = await countGenerationsInPeriod(supabase, deviceUuid, periodDays);
+  const expiresDate = new Date(expiresAt);
+  const periodStart = new Date(expiresDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
+  const used = await countGenerationsInPeriod(supabase, deviceUuid, periodStart);
   return {
     used,
     remaining: Math.max(0, generationLimit - used),
@@ -103,9 +107,10 @@ async function validateGenerationLimits(
   deviceUuid: string,
   planId: string,
   generationLimit: number,
-  periodDays: number | null
+  periodDays: number | null,
+  expiresAt: string | null
 ): Promise<SubscriptionCheckResult> {
-  if (periodDays === null) {
+  if (periodDays === null || !expiresAt) {
     return {
       valid: true,
       planId,
@@ -115,11 +120,15 @@ async function validateGenerationLimits(
     };
   }
 
+  const expiresDate = new Date(expiresAt);
+  const periodStart = new Date(expiresDate.getTime() - periodDays * 24 * 60 * 60 * 1000);
+
   const { used, remaining } = await getGenerationUsage(
     supabase,
     deviceUuid,
     generationLimit,
-    periodDays
+    periodDays,
+    expiresAt
   );
 
   if (remaining <= 0) {
@@ -130,6 +139,8 @@ async function validateGenerationLimits(
       periodDays,
       generationsUsed: used,
       generationsRemaining: 0,
+      periodStart: periodStart.toISOString(),
+      expiresAt,
       error: `Generation limit reached (${generationLimit} per ${periodDays} days)`,
       errorCode: "LIMIT_REACHED",
     };
@@ -142,6 +153,8 @@ async function validateGenerationLimits(
     periodDays,
     generationsUsed: used,
     generationsRemaining: remaining,
+    periodStart: periodStart.toISOString(),
+    expiresAt,
   };
 }
 
@@ -175,7 +188,8 @@ async function checkDeviceSubscriptionTable(
     deviceUuid,
     subscription.plan_id,
     plan.generation_limit,
-    plan.period_days
+    plan.period_days,
+    subscription.expires_at
   );
 }
 
@@ -213,7 +227,8 @@ async function checkAppleReceipts(
     deviceUuid,
     productMapping.plan_id,
     plan.generation_limit,
-    plan.period_days
+    plan.period_days,
+    receipt.expires_at
   );
 }
 

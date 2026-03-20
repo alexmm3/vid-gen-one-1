@@ -54,9 +54,15 @@ final class AppState: ObservableObject {
     
     /// Remaining generations in current period (from backend)
     @Published var generationsRemaining: Int? = nil
-    
+
+    /// Generations used in current period (from backend)
+    @Published var generationsUsed: Int? = nil
+
     /// Total generation limit for current billing period (from backend)
     @Published var generationLimit: Int? = nil
+
+    /// Subscription expiration date (from backend)
+    @Published var subscriptionExpiresAt: Date? = nil
     
     /// App-wide loading state
     @Published var isLoading: Bool = false
@@ -97,10 +103,19 @@ final class AppState: ObservableObject {
     // MARK: - Premium Management
     
     /// Update premium status
-    func setPremiumStatus(_ isPremium: Bool, generationsRemaining: Int? = nil, generationLimit: Int? = nil) {
+    func setPremiumStatus(_ isPremium: Bool, generationsRemaining: Int? = nil, generationsUsed: Int? = nil, generationLimit: Int? = nil, expiresAt: String? = nil) {
         self._isPremiumUser = isPremium
         self.generationsRemaining = generationsRemaining
+        self.generationsUsed = generationsUsed
         self.generationLimit = generationLimit
+
+        if isPremium, let expiresAt = expiresAt {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            self.subscriptionExpiresAt = formatter.date(from: expiresAt) ?? ISO8601DateFormatter().date(from: expiresAt)
+        } else if !isPremium {
+            self.subscriptionExpiresAt = nil
+        }
     }
     
     /// Check if user can generate (has subscription)
