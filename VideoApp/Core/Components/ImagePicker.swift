@@ -42,12 +42,14 @@ struct CameraImagePicker: UIViewControllerRepresentable {
         
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
             if let image = info[.originalImage] as? UIImage {
-                let fixedImage = image.fixedOrientation()
+                // Downsize immediately: camera images can be 48MP (~195MB raw).
+                // Keeping the full-res bitmap in @State causes memory pressure that
+                // stalls URLSession uploads. 2048px is plenty for generation (backend
+                // scales to 1024) and cuts memory from ~195MB to ~16MB.
+                let fixedImage = image
+                    .fixedOrientation()
+                    .resizedToMax(dimension: 2048)
                 parent.image = fixedImage
-                
-                // We previously saved the image to the gallery here, but it may cause
-                // permission prompts or memory issues that interrupt the generation flow.
-                // Removed UIImageWriteToSavedPhotosAlbum to ensure stable uploads.
             }
             parent.dismiss()
         }

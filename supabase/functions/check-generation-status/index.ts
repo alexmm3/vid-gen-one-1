@@ -62,9 +62,11 @@ serve(async (req) => {
 
     const url = new URL(req.url);
     const generationId = url.searchParams.get("generation_id");
+    const callerDeviceId = url.searchParams.get("device_id");
 
     logger.info('request.received', {
       generation_id: generationId || undefined,
+      device_id: callerDeviceId || undefined,
     });
 
     if (!generationId) {
@@ -89,6 +91,23 @@ serve(async (req) => {
         JSON.stringify({ error: "Generation not found", request_id: logger.getRequestId() }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    // Ownership check: if caller provides device_id, verify it matches
+    if (callerDeviceId) {
+      const { data: device } = await supabase
+        .from("devices")
+        .select("id")
+        .eq("device_id", callerDeviceId)
+        .maybeSingle();
+
+      if (!device || device.id !== generation.device_id) {
+        logger.warn('ownership.denied', { metadata: { caller_device_id: callerDeviceId } });
+        return new Response(
+          JSON.stringify({ error: "Generation not found", request_id: logger.getRequestId() }),
+          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // If it's processing and it's a Grok generation, poll Grok API

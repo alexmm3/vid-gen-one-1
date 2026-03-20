@@ -1,0 +1,12 @@
+diff --git a/supabase/functions/_shared/admin-auth.ts b/supabase/functions/_shared/admin-auth.ts
+index cafcace..b91b5a8 100644
+--- a/supabase/functions/_shared/admin-auth.ts
++++ b/supabase/functions/_shared/admin-auth.ts
+@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.4";
+ 
+ export const adminCorsHeaders = {
+   "Access-Control-Allow-Origin": "*",
++  "Access-Control-Allow-Methods": "POST, OPTIONS",
+   "Access-Control-Allow-Headers":
+     "authorization, x-client-info, apikey, content-type, x-admin-token, x-file-name, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+   "Content-Type": "application/json",

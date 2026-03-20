@@ -70,6 +70,7 @@ final class StorageService {
         
         var request = URLRequest(url: uploadUrl)
         request.httpMethod = "POST"
+        request.timeoutInterval = AppConstants.API.requestTimeout
         request.setValue("Bearer \(Secrets.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
         request.setValue(Secrets.supabaseAnonKey, forHTTPHeaderField: "apikey")
         request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")

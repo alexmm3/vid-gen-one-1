@@ -205,7 +205,10 @@ final class GenerationService: ObservableObject {
     func checkStatus(generationId: String, fetchId: Int?) async throws -> GenerationJob {
         var urlComponents = URLComponents(url: SupabaseEndpoints.checkGenerationStatus, resolvingAgainstBaseURL: false)!
         
-        var queryItems = [URLQueryItem(name: "generation_id", value: generationId)]
+        var queryItems = [
+            URLQueryItem(name: "generation_id", value: generationId),
+            URLQueryItem(name: "device_id", value: DeviceManager.shared.backendDeviceId),
+        ]
         if let fetchId = fetchId {
             queryItems.append(URLQueryItem(name: "fetch_id", value: String(fetchId)))
         }

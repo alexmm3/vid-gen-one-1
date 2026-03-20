@@ -137,8 +137,14 @@ export async function startGeneration(
     .limit(1)
     .maybeSingle();
 
-  if (effectPipeline?.pipeline_id && preGlobals.pipelines_enabled !== false) {
-    logger.info("pipeline.routing", { metadata: { pipeline_id: effectPipeline.pipeline_id } });
+  const directPipelinePrefix = "direct-pipeline:";
+  const pipelineIdFromSyntheticEffect = effect.id.startsWith(directPipelinePrefix)
+    ? effect.id.slice(directPipelinePrefix.length)
+    : null;
+  const activePipelineId = effectPipeline?.pipeline_id ?? pipelineIdFromSyntheticEffect ?? null;
+
+  if (activePipelineId && preGlobals.pipelines_enabled !== false) {
+    logger.info("pipeline.routing", { metadata: { pipeline_id: activePipelineId } });
 
     try {
       await supersedePipelineExecution(supabase, existingPipelineExecutionId, logger);
@@ -162,7 +168,7 @@ export async function startGeneration(
       };
 
       const pipelineResult = await runPipeline(
-        effectPipeline.pipeline_id,
+        activePipelineId,
         generationId,
         pipelineContext,
         supabase,

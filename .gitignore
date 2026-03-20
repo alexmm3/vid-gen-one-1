@@ -18,6 +18,19 @@ xcuserdata/
 supabase/.branches
 supabase/.temp
 supabase/functions/**/.env
+# Large MCP deploy artifacts (regenerate with supabase/scripts/build-generate-video-deploy-payload.sh)
+supabase/.deploy-generate-video.payload.json
+supabase/.b64-deploy-generate-video.payload.json
+supabase/.deploy-generate-video.mcp-arguments.json
+supabase/.deploy-generate-video.payload.oneline.json
+
+# Local / tool scratch (do not commit)
+.cursor/
+.tmp_*.json
+.tmp_*.txt
+.exact_deploy_args.json
+.gv_deploy_single.json
+term_mcp_out.txt
 
 # Node
 node_modules/
