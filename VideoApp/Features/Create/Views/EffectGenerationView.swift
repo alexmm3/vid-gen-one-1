@@ -64,8 +64,9 @@ struct EffectGenerationView: View {
                     // Prompt field
                     VStack(alignment: .leading, spacing: VideoSpacing.xs) {
                         Text("Additional prompt (optional)")
-                            .font(.videoCaption)
-                            .foregroundColor(.videoTextSecondary)
+                            .font(.videoSubheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.videoTextPrimary)
                         TextField("Describe any extra details…", text: $promptText, axis: .vertical)
                             .font(.videoBody)
                             .foregroundColor(.videoTextPrimary)
@@ -216,7 +217,7 @@ struct EffectGenerationView: View {
                 // Left Half: Primary Photo
                 photoBox(
                     photo: $primaryPhoto,
-                    placeholderIcon: "person.crop.rectangle.badge.plus",
+                    placeholderIcon: "photo.badge.plus",
                     placeholderText: "Photo 1",
                     onTap: {
                         selectingSecondary = false
@@ -227,7 +228,7 @@ struct EffectGenerationView: View {
                 // Right Half: Secondary Photo
                 photoBox(
                     photo: $secondaryPhoto,
-                    placeholderIcon: "person.crop.rectangle.badge.plus",
+                    placeholderIcon: "photo.badge.plus",
                     placeholderText: "Photo 2",
                     onTap: {
                         selectingSecondary = true
@@ -246,35 +247,10 @@ struct EffectGenerationView: View {
         } label: {
             ZStack {
                 if let image = photo.wrappedValue {
-                    GeometryReader { geo in
-                        ZStack {
-                            // Blurred background
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: geo.size.width, height: 160)
-                                .blur(radius: 15)
-                                .overlay(Color.black.opacity(0.3))
-                                .clipped()
-                            
-                            // Uncropped image
-                            Image(uiImage: image)
-                                .resizable()
-                                .scaledToFit()
-                                .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
-                                .overlay(
-                                    Rectangle()
-                                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                                )
-                                .frame(width: geo.size.width, height: 160)
-                        }
-                    }
-                    .frame(height: 160)
-                    .clipShape(RoundedRectangle(cornerRadius: VideoSpacing.radiusMedium))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: VideoSpacing.radiusMedium)
-                            .stroke(Color.videoAccent, lineWidth: 2)
-                    )
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: VideoSpacing.radiusMedium))
                     
                     // Change badge
                     VStack {
@@ -282,38 +258,41 @@ struct EffectGenerationView: View {
                         HStack {
                             Spacer()
                             Text("Change")
-                                .font(.system(size: 10, weight: .bold))
+                                .font(.system(size: 12, weight: .bold))
                                 .foregroundColor(.white)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
                                 .background(Color.black.opacity(0.6))
                                 .clipShape(Capsule())
                                 .padding(8)
                         }
                     }
                 } else {
-                    VStack(spacing: VideoSpacing.sm) {
-                        ZStack {
-                            Circle()
-                                .fill(Color.videoAccent.opacity(0.15))
-                                .frame(width: 40, height: 40)
-                            Image(systemName: placeholderIcon)
-                                .font(.system(size: 18))
-                                .foregroundColor(.videoAccent)
-                        }
-                        VStack(spacing: 4) {
-                            Text("Add")
-                                .font(.videoSubheadline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.videoTextPrimary)
-                            Text(placeholderText)
-                                .font(.videoCaptionSmall)
-                                .foregroundColor(.videoTextSecondary)
+                    ZStack {
+                        Color.videoSurface
+                        
+                        VStack(spacing: VideoSpacing.sm) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.videoAccent.opacity(0.15))
+                                    .frame(width: 48, height: 48)
+                                Image(systemName: placeholderIcon)
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.videoAccent)
+                            }
+                            VStack(spacing: 4) {
+                                Text("Add")
+                                    .font(.videoSubheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.videoTextPrimary)
+                                Text(placeholderText)
+                                    .font(.videoCaption)
+                                    .foregroundColor(.videoTextSecondary)
+                            }
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(height: 160)
-                    .background(Color.videoSurface)
+                    .aspectRatio(1, contentMode: .fit)
                     .cornerRadius(VideoSpacing.radiusMedium)
                     .overlay(
                         RoundedRectangle(cornerRadius: VideoSpacing.radiusMedium)
@@ -339,7 +318,8 @@ struct EffectGenerationView: View {
                         onTap()
                     } label: {
                         Text("Change")
-                            .font(.videoCaptionSmall)
+                            .font(.videoBody)
+                            .fontWeight(.medium)
                             .foregroundColor(.videoAccent)
                     }
                 }
@@ -350,45 +330,22 @@ struct EffectGenerationView: View {
                 HapticManager.shared.mediumImpact()
                 onTap()
             } label: {
-                ZStack {
-                    if let image = photo.wrappedValue {
-                        GeometryReader { geo in
-                            ZStack {
-                                // Blurred background
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: geo.size.width, height: 160)
-                                    .blur(radius: 15)
-                                    .overlay(Color.black.opacity(0.3)) // Darken the blur slightly for contrast
-                                    .clipped()
-                                
-                                // Uncropped image
-                                Image(uiImage: image)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
-                                    .overlay(
-                                        Rectangle()
-                                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                                    )
-                                    .frame(width: geo.size.width, height: 160)
-                            }
-                        }
-                        .frame(height: 160)
-                        .clipShape(RoundedRectangle(cornerRadius: VideoSpacing.radiusMedium))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: VideoSpacing.radiusMedium)
-                                .stroke(Color.videoAccent, lineWidth: 2)
-                        )
-                    } else {
+                if let image = photo.wrappedValue {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: VideoSpacing.radiusLarge))
+                } else {
+                    ZStack {
+                        Color.videoSurface
+                        
                         VStack(spacing: VideoSpacing.sm) {
                             ZStack {
                                 Circle()
                                     .fill(Color.videoAccent.opacity(0.15))
-                                    .frame(width: 50, height: 50)
-                                Image(systemName: "person.crop.rectangle.badge.plus")
-                                    .font(.system(size: 24))
+                                    .frame(width: 64, height: 64)
+                                Image(systemName: "photo.badge.plus")
+                                    .font(.system(size: 28))
                                     .foregroundColor(.videoAccent)
                             }
                             VStack(spacing: 4) {
@@ -397,19 +354,18 @@ struct EffectGenerationView: View {
                                     .fontWeight(.semibold)
                                     .foregroundColor(.videoTextPrimary)
                                 Text("Tap to select from gallery or take a photo")
-                                    .font(.videoCaptionSmall)
+                                    .font(.videoBodySmall)
                                     .foregroundColor(.videoTextSecondary)
                             }
                         }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 160)
-                        .background(Color.videoSurface)
-                        .cornerRadius(VideoSpacing.radiusMedium)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: VideoSpacing.radiusMedium)
-                                .stroke(Color.videoAccent.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [8]))
-                        )
                     }
+                    .frame(maxWidth: .infinity)
+                    .aspectRatio(1, contentMode: .fit)
+                    .cornerRadius(VideoSpacing.radiusLarge)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: VideoSpacing.radiusLarge)
+                            .stroke(Color.videoAccent.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [8]))
+                    )
                 }
             }
             .buttonStyle(ScaleButtonStyle())

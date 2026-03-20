@@ -41,7 +41,7 @@ struct MainTabView: View {
                 }
                 .tag(VideoTab.profile)
             }
-            .tint(.videoAccent)
+            .tint(.white)
             .preferredColorScheme(.dark)
             .environmentObject(appState)
             

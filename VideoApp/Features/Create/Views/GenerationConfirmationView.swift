@@ -134,7 +134,7 @@ struct GenerationConfirmationView: View {
                 .foregroundColor(.videoTextSecondary)
                 .multilineTextAlignment(.center)
             
-            Text("Generation typically takes 4-5 minutes")
+            Text("Generation typically takes about a minute")
                 .font(.videoCaption)
                 .foregroundColor(.videoTextTertiary)
                 .padding(.top, VideoSpacing.xs)

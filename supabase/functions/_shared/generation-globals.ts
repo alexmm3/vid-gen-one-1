@@ -1,5 +1,5 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Logger } from "./logger.ts";
+import type { SupabaseClientLike } from "./supabase-client.ts";
 
 export interface GenerationGlobals {
   video_resolution: string | null;
@@ -34,7 +34,7 @@ let cachedAt = 0;
 const CACHE_TTL_MS = 30_000;
 
 export async function loadGenerationGlobals(
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClientLike,
   logger: Logger,
 ): Promise<GenerationGlobals> {
   if (cached && Date.now() - cachedAt < CACHE_TTL_MS) {

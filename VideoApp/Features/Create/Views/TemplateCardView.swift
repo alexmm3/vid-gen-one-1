@@ -15,11 +15,7 @@ struct TemplateCardView: View {
             .aspectRatio(9/16, contentMode: .fit)
             .overlay {
                 ZStack {
-                    // Thumbnail preview (much more efficient than video)
-                    VideoThumbnailView(
-                        thumbnailUrl: template.fullThumbnailUrl,
-                        videoUrl: template.fullVideoUrl
-                    )
+                    LoopingRemoteVideoPlayer(url: template.fullPreviewUrl)
                     
                     // Gradient overlay at bottom
                     VStack {

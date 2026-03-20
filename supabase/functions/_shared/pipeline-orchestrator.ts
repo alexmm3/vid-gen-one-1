@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { toClientSafeMessage } from "./client-safe-message.ts";
 import { Logger } from "./logger.ts";
 import { executeGeminiImage } from "./providers/gemini-image.ts";
 import { executeGeminiVision } from "./providers/gemini-vision.ts";
@@ -12,6 +12,7 @@ import {
   getModelOverride,
   type GenerationGlobals,
 } from "./generation-globals.ts";
+import type { SupabaseClientLike } from "./supabase-client.ts";
 
 // deno-lint-ignore no-explicit-any
 type Json = Record<string, any>;
@@ -77,9 +78,15 @@ function resolveContextValue(context: PipelineContext, path: string): unknown {
  */
 function resolveInputs(context: PipelineContext, inputMapping: Json): Json {
   const resolved: Json = {};
-  for (const [key, path] of Object.entries(inputMapping)) {
+  if (!inputMapping) return resolved;
+  let mapping = inputMapping;
+  if (typeof mapping === "string") {
+    try { mapping = JSON.parse(mapping); } catch (e) {}
+  }
+  for (const [key, path] of Object.entries(mapping)) {
     if (typeof path === "string") {
       resolved[key] = resolveContextValue(context, path);
+      console.log(`[resolveInputs] key=${key}, path=${path}, resolved=${resolved[key]}`);
     } else {
       resolved[key] = path;
     }
@@ -96,6 +103,8 @@ function storeOutputs(context: PipelineContext, stepName: string, outputMapping:
     context.steps = {};
   }
   (context.steps as any)[stepName] = { output: result };
+
+  if (!outputMapping) return;
 
   // Also map to specific context keys if requested
   for (const [contextKey, resultPath] of Object.entries(outputMapping)) {
@@ -121,6 +130,9 @@ function storeOutputs(context: PipelineContext, stepName: string, outputMapping:
  */
 function substituteTemplate(template: string, context: PipelineContext): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_match, key) => {
+    // We handle user_prompt automatically at the end of the pipeline, 
+    // so we ignore it in templates to prevent duplication.
+    if (key === "user_prompt") return "";
     const value = context[key];
     return value != null ? String(value) : "";
   });
@@ -132,7 +144,7 @@ function substituteTemplate(template: string, context: PipelineContext): string 
 async function executeStep(
   step: PipelineStep,
   context: PipelineContext,
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClientLike,
   logger: Logger,
   pipelineExecutionId: string,
   globals: GenerationGlobals,
@@ -213,9 +225,17 @@ async function executeStep(
       const promptSource = config.prompt_source as string | undefined;
       const imageSource = config.image_source as string | undefined;
 
-      const finalPrompt = promptSource
+      let finalPrompt = promptSource
         ? (context[promptSource] as string) || resolvedPrompt
         : resolvedPrompt || context.effect_concept;
+
+      if (context.user_prompt && typeof context.user_prompt === "string" && context.user_prompt.trim().length > 0) {
+        finalPrompt += `\n\n---
+USER'S CUSTOM INSTRUCTIONS:
+The user has provided additional specific wishes for this video. You must maintain the overall style and core concept described in the prompt above, but please try your best to incorporate the following user recommendations:
+"${context.user_prompt.trim()}"
+---`;
+      }
 
       const finalImage = imageSource
         ? (context[imageSource] as string) || context.user_image
@@ -263,7 +283,7 @@ export async function runPipeline(
   pipelineId: string,
   generationId: string,
   context: PipelineContext,
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClientLike,
   logger: Logger,
 ): Promise<PipelineResult> {
   logger.info("pipeline.start", { metadata: { pipeline_id: pipelineId, generation_id: generationId } });
@@ -417,7 +437,7 @@ export async function runPipeline(
           .from("pipeline_step_executions")
           .update({
             status: "failed",
-            error_message: errMsg,
+            error_message: toClientSafeMessage(errMsg),
             completed_at: new Date().toISOString(),
             duration_ms: durationMs,
           })
@@ -431,7 +451,7 @@ export async function runPipeline(
           .from("pipeline_executions")
           .update({
             status: "failed",
-            error_message: `Step "${step.name}" failed: ${errMsg}`,
+            error_message: toClientSafeMessage(`Step "${step.name}" failed: ${errMsg}`),
             completed_at: new Date().toISOString(),
           })
           .eq("id", pipelineExecutionId);

@@ -9,9 +9,7 @@
 
 export const SUPPORTED_ASPECT_RATIOS = [
   "9:16",
-  "3:4",
   "1:1",
-  "4:3",
   "16:9",
 ] as const;
 
@@ -19,9 +17,7 @@ export type SupportedAspectRatio = (typeof SUPPORTED_ASPECT_RATIOS)[number];
 
 const RATIO_VALUES: Record<SupportedAspectRatio, number> = {
   "9:16": 9 / 16,   // 0.5625
-  "3:4": 3 / 4,     // 0.75
   "1:1": 1,
-  "4:3": 4 / 3,     // 1.333
   "16:9": 16 / 9,   // 1.778
 };
 
@@ -30,10 +26,8 @@ const RATIO_VALUES: Record<SupportedAspectRatio, number> = {
  * Boundaries are geometric midpoints between adjacent ratios.
  */
 export function classifyAspectRatio(widthOverHeight: number): SupportedAspectRatio {
-  if (widthOverHeight < 0.66) return "9:16";
-  if (widthOverHeight < 0.87) return "3:4";
-  if (widthOverHeight < 1.15) return "1:1";
-  if (widthOverHeight < 1.55) return "4:3";
+  if (widthOverHeight < 0.78) return "9:16";
+  if (widthOverHeight < 1.39) return "1:1";
   return "16:9";
 }
 

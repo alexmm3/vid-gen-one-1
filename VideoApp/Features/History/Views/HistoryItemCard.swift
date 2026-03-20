@@ -16,13 +16,7 @@ struct HistoryItemCard: View {
                 // Background
                 Color.videoSurface
                 
-                // Video preview with cached thumbnail underlay to prevent blink on view recreation.
-                // The thumbnail loads instantly from cache; the video player renders on top once ready.
                 if let url = generation.fullOutputUrl {
-                    VideoThumbnailView(thumbnailUrl: nil, videoUrl: url)
-                        .frame(width: geometry.size.width, height: geometry.size.height)
-                        .clipped()
-                    
                     LoopingRemoteVideoPlayer(url: url)
                 } else {
                     // Placeholder for failed/pending
@@ -53,7 +47,7 @@ struct HistoryItemCard: View {
                                 .foregroundColor(.videoBlack)
                                 .padding(.horizontal, 6)
                                 .padding(.vertical, 3)
-                                .background(Color.videoAccent)
+                                .background(Color.white)
                                 .cornerRadius(4)
                                 .padding(VideoSpacing.xs)
                         }

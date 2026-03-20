@@ -41,8 +41,8 @@ final class StorageService {
     
     /// Upload image, always center-cropped to 9:16.
     /// Trims left/right for wide images, top/bottom for tall ones —
-    /// keeping the centre of the frame. Always reports "9:16" so Grok
-    /// generates a full-screen portrait video with no black bars.
+    /// keeping the centre of the frame. Always reports "9:16" so playback
+    /// stays full-screen portrait with no black bars.
     func uploadImage(_ image: UIImage) async throws -> ImageUploadResult {
         let processed = image
             .fixedOrientation()
@@ -70,6 +70,7 @@ final class StorageService {
         
         var request = URLRequest(url: uploadUrl)
         request.httpMethod = "POST"
+        request.timeoutInterval = AppConstants.API.requestTimeout
         request.setValue("Bearer \(Secrets.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
         request.setValue(Secrets.supabaseAnonKey, forHTTPHeaderField: "apikey")
         request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")

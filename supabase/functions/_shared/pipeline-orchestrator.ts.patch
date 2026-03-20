@@ -1,0 +1,32 @@
+--- supabase/functions/_shared/pipeline-orchestrator.ts
++++ supabase/functions/_shared/pipeline-orchestrator.ts
+@@ -91,6 +91,8 @@
+  * Store step outputs into the pipeline context via output_mapping.
+  */
+ function storeOutputs(context: PipelineContext, stepName: string, outputMapping: Json, result: Json): void {
++  console.log(`[storeOutputs] stepName=${stepName}, outputMapping type=${typeof outputMapping}, isArray=${Array.isArray(outputMapping)}`);
++  
+   // Store in the steps namespace
+   if (!context.steps) {
+     context.steps = {};
+@@ -98,8 +100,12 @@
+   (context.steps as any)[stepName] = { output: result };
+ 
++  if (!outputMapping) return;
++  if (typeof outputMapping === "string") {
++    try { outputMapping = JSON.parse(outputMapping); } catch (e) {}
++  }
++
+   // Also map to specific context keys if requested
+   for (const [contextKey, resultPath] of Object.entries(outputMapping)) {
++    console.log(`[storeOutputs] mapping contextKey=${contextKey} from resultPath=${resultPath}`);
+     if (typeof resultPath === "string") {
+       let path = resultPath;
+       if (path.startsWith("result.")) {
+@@ -113,6 +119,7 @@
+         current = current[part];
+       }
++      console.log(`[storeOutputs] mapped contextKey=${contextKey} to value=${current}`);
+       if (current !== undefined) {
+         context[contextKey] = current;
+       }

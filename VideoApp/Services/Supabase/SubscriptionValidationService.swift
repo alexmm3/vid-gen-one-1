@@ -18,15 +18,13 @@ final class SubscriptionValidationService {
     
     /// Validate / register Apple subscription with backend
     /// - Parameters:
-    ///   - originalTransactionId: Apple's transaction ID (from StoreKit 2)
-    ///   - productId: Apple product ID (e.g. "com.aivideo.weekly"). Sent when we have a live StoreKit transaction.
-    ///   - expiresDate: Subscription expiration date from StoreKit. Sent when we have a live StoreKit transaction.
+    ///   - originalTransactionId: Apple's original transaction ID (from StoreKit 2)
+    ///   - signedTransactionInfo: Verified StoreKit JWS for server-side Apple verification
     ///   - useSandbox: Whether this is a sandbox / TestFlight transaction
     /// - Returns: Validation response with subscription details
     func validateSubscription(
         originalTransactionId: String,
-        productId: String? = nil,
-        expiresDate: Date? = nil,
+        signedTransactionInfo: String? = nil,
         useSandbox: Bool = false
     ) async throws -> ValidationResult {
         let url = SupabaseEndpoints.validateAppleSubscription
@@ -37,20 +35,13 @@ final class SubscriptionValidationService {
         request.timeoutInterval = 30
         
         var body: [String: Any] = [
-            "device_id": DeviceManager.shared.deviceId,
+            "device_id": DeviceManager.shared.backendDeviceId,
             "original_transaction_id": originalTransactionId,
             "use_sandbox": useSandbox
         ]
         
-        // Include product details so the backend can register the subscription
-        // without needing to call Apple's Server API
-        if let productId = productId {
-            body["product_id"] = productId
-        }
-        if let expiresDate = expiresDate {
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            body["expires_date"] = formatter.string(from: expiresDate)
+        if let signedTransactionInfo = signedTransactionInfo {
+            body["signed_transaction_info"] = signedTransactionInfo
         }
         
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -62,7 +53,12 @@ final class SubscriptionValidationService {
             throw ValidationError.requestFailed
         }
         
-        let result = try JSONDecoder().decode(ValidationResponse.self, from: data)
+        let result: ValidationResponse
+        do {
+            result = try JSONDecoder().decode(ValidationResponse.self, from: data)
+        } catch {
+            throw ValidationError.invalidResponse
+        }
         
         if result.valid {
             print("✅ SubscriptionValidation: Valid subscription")
@@ -101,7 +97,7 @@ struct ValidationResult {
 
 // MARK: - Errors
 
-enum ValidationError: Error, LocalizedError {
+enum ValidationError: Error, LocalizedError, Equatable {
     case requestFailed
     case invalidResponse
     
@@ -124,9 +120,9 @@ private struct ValidationResponse: Decodable {
     let subscription: SubscriptionInfo?
     
     struct SubscriptionInfo: Decodable {
-        let productId: String
-        let originalTransactionId: String
-        let expiresAt: String
+        let productId: String?
+        let originalTransactionId: String?
+        let expiresAt: String?
         let status: Int
         let environment: String
         let plan: PlanInfo?

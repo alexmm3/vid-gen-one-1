@@ -25,8 +25,8 @@ extension Color {
     
     // MARK: - Accent Colors (Neon Polycolor)
     
-    /// Primary accent – electric cyan (#22D3EE). Used for icons, links, borders.
-    static let videoAccent = Color(hex: "22D3EE")
+    /// Primary accent – electric cyan (#C8A96E). Used for icons, links, borders.
+    static let videoAccent = Color(hex: "C8A96E")
     
     /// Secondary accent – violet (#A855F7). Used in gradients and secondary highlights.
     static let videoAccentSecondary = Color(hex: "A855F7")
@@ -35,7 +35,7 @@ extension Color {
     static let videoAccentTertiary = Color(hex: "D946EF")
     
     /// Marketing gradient start – bright cyan
-    static let videoMarketing = Color(hex: "22D3EE")
+    static let videoMarketing = Color(hex: "C8A96E")
     
     /// Marketing gradient end – fuchsia
     static let videoMarketingEnd = Color(hex: "D946EF")
@@ -76,7 +76,7 @@ extension Color {
     // MARK: - Status Colors
     
     /// Success – bright cyan to match accent
-    static let videoSuccess = Color(hex: "22D3EE")
+    static let videoSuccess = Color(hex: "C8A96E")
     
     /// Warning – neon amber
     static let videoWarning = Color(hex: "FBBF24")
@@ -117,16 +117,16 @@ extension Color {
 // MARK: - Gradient Definitions
 
 extension LinearGradient {
-    /// Primary accent gradient – cyan to violet (buttons, highlights)
+    /// Subtle white-to-gray gradient (decorative use only)
     static let videoAccentGradient = LinearGradient(
-        colors: [Color(hex: "22D3EE"), Color(hex: "A855F7")],
+        colors: [Color.white, Color.white.opacity(0.85)],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
     
-    /// Marketing / CTA gradient – cyan to fuchsia (paywall, subscribe)
+    /// Marketing gradient — kept as alias for compatibility, now solid white
     static let videoMarketingGradient = LinearGradient(
-        colors: [Color(hex: "22D3EE"), Color(hex: "D946EF")],
+        colors: [Color.white, Color.white],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
@@ -145,22 +145,22 @@ extension LinearGradient {
         endPoint: .bottom
     )
     
-    /// Processing / loading gradient – cyan → violet → fuchsia
+    /// Processing / loading gradient — subtle white pulse
     static let videoProcessingGradient = LinearGradient(
         colors: [
-            Color(hex: "22D3EE"),
-            Color(hex: "A855F7"),
-            Color(hex: "D946EF")
+            Color.white.opacity(0.6),
+            Color.white.opacity(0.9),
+            Color.white.opacity(0.6)
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
     
-    /// Neon glow gradient for decorative use (e.g. cards, headers)
+    /// Soft neutral glow gradient (replaces neon glow)
     static let videoNeonGlowGradient = LinearGradient(
         colors: [
-            Color(hex: "22D3EE").opacity(0.4),
-            Color(hex: "D946EF").opacity(0.2),
+            Color.white.opacity(0.08),
+            Color.white.opacity(0.04),
             Color.clear
         ],
         startPoint: .topLeading,

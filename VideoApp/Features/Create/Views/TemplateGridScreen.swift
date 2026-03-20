@@ -66,11 +66,6 @@ struct TemplateGridScreen: View {
         } label: {
             GeometryReader { geometry in
                 ZStack {
-                    // Cached thumbnail underlay — renders instantly from image cache
-                    VideoThumbnailView(thumbnailUrl: template.fullThumbnailUrl, videoUrl: template.fullPreviewUrl)
-                        .frame(width: geometry.size.width, height: geometry.size.height)
-                        .clipped()
-                    
                     // Looping video player — uses lightweight preview URL for grid cards.
                     // Full video (template.videoUrl) is reserved for AI generation & detail view.
                     LoopingRemoteVideoPlayer(url: template.fullPreviewUrl)
@@ -163,9 +158,6 @@ struct EffectGridScreen: View {
         } label: {
             GeometryReader { geometry in
                 ZStack {
-                    VideoThumbnailView(thumbnailUrl: effect.fullThumbnailUrl, videoUrl: effect.fullPreviewUrl)
-                        .frame(width: geometry.size.width, height: geometry.size.height)
-                        .clipped()
                     LoopingRemoteVideoPlayer(url: effect.fullPreviewUrl)
                     VStack {
                         Spacer()

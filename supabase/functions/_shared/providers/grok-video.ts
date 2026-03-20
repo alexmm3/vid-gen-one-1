@@ -27,6 +27,7 @@ export async function executeGrokVideo(
       duration: input.duration,
       aspect_ratio: input.aspectRatio,
       resolution: input.resolution,
+      image_url: input.imageUrl,
     },
   });
 

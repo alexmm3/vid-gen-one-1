@@ -54,8 +54,12 @@ export async function executeGeminiImage(
     temperature: 0.4,
   };
 
+  generationConfig.imageConfig = {
+    imageSize: "2K",
+  };
+
   if (input.targetAspectRatio) {
-    generationConfig.imageConfig = { aspectRatio: input.targetAspectRatio };
+    generationConfig.imageConfig.aspectRatio = input.targetAspectRatio;
   }
 
   const body = {
@@ -96,9 +100,10 @@ export async function executeGeminiImage(
   let resultMime = "image/png";
 
   for (const part of candidates[0].content?.parts || []) {
-    if (part.inline_data) {
-      resultBase64 = part.inline_data.data;
-      resultMime = part.inline_data.mime_type || "image/png";
+    const inlineData = part.inlineData || part.inline_data;
+    if (inlineData) {
+      resultBase64 = inlineData.data;
+      resultMime = inlineData.mimeType || inlineData.mime_type || "image/png";
       break;
     }
   }

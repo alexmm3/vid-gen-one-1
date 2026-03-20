@@ -111,6 +111,15 @@ class LoopingVideoUIView: UIView {
 
 class VideoTimeProvider {
     fileprivate var getTime: (() -> CMTime)?
+    fileprivate var getDurationFn: (() -> CMTime?)?
+    
+    /// Seek callback — accepts a fraction (0…1) and seeks the player
+    var seek: ((Double) -> Void)?
+    
+    /// Duration of the current item, queried live from the player
+    var duration: CMTime? {
+        getDurationFn?()
+    }
     
     func currentTime() -> CMTime {
         getTime?() ?? .zero
@@ -138,9 +147,7 @@ struct RemoteVideoPlayer: UIViewRepresentable {
     func makeUIView(context: Context) -> RemoteVideoUIView {
         let view = RemoteVideoUIView()
         view.configure(url: url, isMuted: isMuted, videoGravity: videoGravity)
-        timeProvider?.getTime = { [weak view] in
-            view?.getCurrentTime() ?? .zero
-        }
+        bindTimeProvider(to: view)
         return view
     }
     
@@ -151,9 +158,18 @@ struct RemoteVideoPlayer: UIViewRepresentable {
             uiView.pause()
         }
         uiView.setMuted(isMuted)
-        // Keep time provider reference up to date
-        timeProvider?.getTime = { [weak uiView] in
-            uiView?.getCurrentTime() ?? .zero
+        bindTimeProvider(to: uiView)
+    }
+    
+    private func bindTimeProvider(to view: RemoteVideoUIView) {
+        timeProvider?.getTime = { [weak view] in
+            view?.getCurrentTime() ?? .zero
+        }
+        timeProvider?.getDurationFn = { [weak view] in
+            view?.getDuration()
+        }
+        timeProvider?.seek = { [weak view] fraction in
+            view?.seekToFraction(fraction)
         }
     }
 }
@@ -167,7 +183,7 @@ class RemoteVideoUIView: UIView {
     
     override init(frame: CGRect) {
         super.init(frame: frame)
-        backgroundColor = .black
+        backgroundColor = .clear
     }
     
     required init?(coder: NSCoder) {
@@ -229,6 +245,21 @@ class RemoteVideoUIView: UIView {
     /// Returns the player's current playback time
     func getCurrentTime() -> CMTime {
         queuePlayer?.currentTime() ?? .zero
+    }
+    
+    /// Returns the duration of the current item
+    func getDuration() -> CMTime? {
+        guard let item = queuePlayer?.currentItem,
+              item.duration.isNumeric else { return nil }
+        return item.duration
+    }
+    
+    /// Seek to a fraction of the total duration (0…1)
+    func seekToFraction(_ fraction: Double) {
+        guard let item = queuePlayer?.currentItem,
+              item.duration.isNumeric else { return }
+        let target = CMTimeMultiplyByFloat64(item.duration, multiplier: Float64(fraction))
+        queuePlayer?.seek(to: target, toleranceBefore: .zero, toleranceAfter: .zero)
     }
     
     func setMuted(_ muted: Bool) {

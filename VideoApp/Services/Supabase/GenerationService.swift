@@ -66,7 +66,7 @@ final class GenerationService: ObservableObject {
         // character_orientation: "image" = would use image orientation (10s limit) - NOT USED
         // copy_audio: true = always copy audio from reference video
         let body: [String: Any] = [
-            "device_id": DeviceManager.shared.deviceId,
+            "device_id": DeviceManager.shared.backendDeviceId,
             "init_image_url": portraitUrl,
             "reference_video_url": referenceVideoUrl,
             "character_orientation": "video",
@@ -97,7 +97,7 @@ final class GenerationService: ObservableObject {
             
         case 403:
             let errorResponse = try JSONDecoder().decode(ErrorResponse.self, from: data)
-            if errorResponse.errorCode == "NO_SUBSCRIPTION" {
+            if errorResponse.errorCode == "NO_SUBSCRIPTION" || errorResponse.errorCode == "SUBSCRIPTION_EXPIRED" {
                 throw GenerationServiceError.noSubscription
             }
             throw GenerationServiceError.serverError(errorResponse.error)
@@ -143,7 +143,7 @@ final class GenerationService: ObservableObject {
         request.timeoutInterval = AppConstants.API.requestTimeout
 
         var body: [String: Any] = [
-            "device_id": DeviceManager.shared.deviceId,
+            "device_id": DeviceManager.shared.backendDeviceId,
             "effect_id": effectId,
             "input_image_url": primaryImageUrl
         ]
@@ -180,7 +180,7 @@ final class GenerationService: ObservableObject {
             return job
         case 403:
             let errorResponse = try JSONDecoder().decode(ErrorResponse.self, from: data)
-            if errorResponse.errorCode == "NO_SUBSCRIPTION" {
+            if errorResponse.errorCode == "NO_SUBSCRIPTION" || errorResponse.errorCode == "SUBSCRIPTION_EXPIRED" {
                 throw GenerationServiceError.noSubscription
             }
             throw GenerationServiceError.serverError(errorResponse.error)
@@ -205,7 +205,10 @@ final class GenerationService: ObservableObject {
     func checkStatus(generationId: String, fetchId: Int?) async throws -> GenerationJob {
         var urlComponents = URLComponents(url: SupabaseEndpoints.checkGenerationStatus, resolvingAgainstBaseURL: false)!
         
-        var queryItems = [URLQueryItem(name: "generation_id", value: generationId)]
+        var queryItems = [
+            URLQueryItem(name: "generation_id", value: generationId),
+            URLQueryItem(name: "device_id", value: DeviceManager.shared.backendDeviceId),
+        ]
         if let fetchId = fetchId {
             queryItems.append(URLQueryItem(name: "fetch_id", value: String(fetchId)))
         }
@@ -233,7 +236,7 @@ final class GenerationService: ObservableObject {
             fetchId: fetchId,
             status: GenerationStatus(rawValue: result.status) ?? .processing,
             outputVideoUrl: result.outputVideoUrl,
-            errorMessage: result.errorMessage
+            errorMessage: ClientSafeErrorMessage.sanitizeUserFacing(result.errorMessage)
         )
         
         currentJob = job
@@ -286,7 +289,7 @@ final class GenerationService: ObservableObject {
     func fetchDeviceHistory() async throws -> [RemoteGeneration] {
         var urlComponents = URLComponents(url: SupabaseEndpoints.getDeviceGenerations, resolvingAgainstBaseURL: false)!
         urlComponents.queryItems = [
-            URLQueryItem(name: "device_id", value: DeviceManager.shared.deviceId)
+            URLQueryItem(name: "device_id", value: DeviceManager.shared.backendDeviceId)
         ]
         
         guard let url = urlComponents.url else {
@@ -343,9 +346,9 @@ enum GenerationServiceError: Error, LocalizedError {
         case .limitReached(let limit, _, let remaining):
             return "Generation limit reached (\(limit) per period). \(remaining) remaining."
         case .serverError(let message):
-            return message
+            return ClientSafeErrorMessage.sanitizeUserFacingNonEmpty(message)
         case .networkError(let error):
-            return error.localizedDescription
+            return ClientSafeErrorMessage.sanitizeUserFacingNonEmpty(error.localizedDescription)
         case .invalidResponse:
             return "Invalid response from server"
         case .invalidRequest:
@@ -353,7 +356,7 @@ enum GenerationServiceError: Error, LocalizedError {
         case .statusCheckFailed:
             return "Failed to check generation status"
         case .generationFailed(let message):
-            return "Generation failed: \(message)"
+            return ClientSafeErrorMessage.sanitizeUserFacingNonEmpty(message)
         case .timeout:
             return "Generation timed out. Please try again."
         }

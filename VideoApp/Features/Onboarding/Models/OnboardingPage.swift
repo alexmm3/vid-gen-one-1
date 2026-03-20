@@ -17,24 +17,24 @@ struct OnboardingPage: Identifiable {
     static let pages: [OnboardingPage] = [
         OnboardingPage(
             id: 0,
-            title: "Bring Photos\nTo Life With AI",
-            subtitle: "Upload a single photo and generate stunning videos",
-            videoName: "onboarding_1", // Bundle video name
-            icon: "person.fill.viewfinder"
+            title: "Bring Photos\nTo Life",
+            subtitle: "",
+            videoName: "onboarding_1",
+            icon: ""
         ),
         OnboardingPage(
             id: 1,
             title: "Choose Your\nEffect",
-            subtitle: "Pick an AI effect and customize it with your prompt",
+            subtitle: "",
             videoName: "onboarding_2",
-            icon: "wand.and.stars"
+            icon: ""
         ),
         OnboardingPage(
             id: 2,
             title: "Share\nEverywhere",
-            subtitle: "Generate videos in minutes. Perfect for TikTok, Reels, and more",
+            subtitle: "",
             videoName: "onboarding_3",
-            icon: "square.and.arrow.up"
+            icon: ""
         )
     ]
 }

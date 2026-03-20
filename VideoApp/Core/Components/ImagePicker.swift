@@ -42,7 +42,14 @@ struct CameraImagePicker: UIViewControllerRepresentable {
         
         func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
             if let image = info[.originalImage] as? UIImage {
-                parent.image = image.fixedOrientation()
+                // Downsize immediately: camera images can be 48MP (~195MB raw).
+                // Keeping the full-res bitmap in @State causes memory pressure that
+                // stalls URLSession uploads. 2048px is plenty for generation (backend
+                // scales to 1024) and cuts memory from ~195MB to ~16MB.
+                let fixedImage = image
+                    .fixedOrientation()
+                    .resizedToMax(dimension: 2048)
+                parent.image = fixedImage
             }
             parent.dismiss()
         }
@@ -152,8 +159,7 @@ enum ImagePickerHelper {
 
 // MARK: - Aspect Ratio Classification
 
-/// Maps an image's natural aspect ratio to the nearest standard ratio supported
-/// by both Gemini image editing and Grok video generation APIs.
+/// Maps an image's natural aspect ratio to the nearest standard ratio supported by video generation.
 enum AspectRatioCategory: String, CaseIterable {
     case portrait = "9:16"
     case mildPortrait = "3:4"

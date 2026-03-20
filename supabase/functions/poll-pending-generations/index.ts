@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Logger } from "../_shared/logger.ts";
+import { classifyGrokPollHttpFailure } from "../_shared/grok-polling.ts";
+import { recoverGenerationStart } from "../_shared/start-generation.ts";
+import { toClientSafeMessage } from "../_shared/client-safe-message.ts";
+import type { SupabaseClientLike } from "../_shared/supabase-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,6 +15,7 @@ interface Generation {
   id: string;
   device_id: string;
   status: string;
+  request_id: string | null;
   provider: string | null;
   provider_request_id: string | null;
   api_response: Record<string, unknown> | null;
@@ -40,6 +45,12 @@ interface GrokPollResponse {
   model?: string;
 }
 
+function getGenerationAgeMinutes(createdAt: string, requestId: string | null): number {
+  const requestTimestamp = requestId?.match(/^req_(\d+)_/)?.[1];
+  const effectiveStartedAt = requestTimestamp ? Number(requestTimestamp) : new Date(createdAt).getTime();
+  return (Date.now() - effectiveStartedAt) / 60000;
+}
+
 serve(async (req) => {
   const logger = new Logger('poll-pending-generations');
 
@@ -52,14 +63,14 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const grokApiKey = Deno.env.get("GROK_API_KEY");
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase: SupabaseClientLike = createClient(supabaseUrl, supabaseKey);
 
     logger.info('cron.started');
 
     if (!grokApiKey) {
       logger.error('config.missing', 'GROK_API_KEY not configured');
       return new Response(
-        JSON.stringify({ error: "GROK_API_KEY not configured" }),
+        JSON.stringify({ error: toClientSafeMessage("GROK_API_KEY not configured") }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -77,7 +88,7 @@ serve(async (req) => {
 
     const { data: processingGenerations, error: fetchError } = await supabase
       .from("generations")
-      .select("id, device_id, status, provider, provider_request_id, api_response, poll_count, retry_count, max_retries, error_log, created_at, pipeline_execution_id")
+      .select("id, device_id, status, request_id, provider, provider_request_id, api_response, poll_count, retry_count, max_retries, error_log, created_at, pipeline_execution_id")
       .eq("status", "processing")
       .order("created_at", { ascending: true })
       .limit(50);
@@ -108,8 +119,26 @@ serve(async (req) => {
 
       try {
         if (!gen.provider_request_id) {
+          if (!gen.request_id) {
+            genLogger.warn("generation.recovery_attempt");
+            const recoveryResult = await recoverGenerationStart(supabase, genLogger, gen.id);
+
+            if (recoveryResult) {
+              results.push({
+                generation_id: gen.id,
+                previous_status: "processing",
+                new_status: recoveryResult.status,
+                success: recoveryResult.success,
+                error: recoveryResult.error
+                  ? toClientSafeMessage(recoveryResult.error)
+                  : undefined,
+              });
+              continue;
+            }
+          }
+
           genLogger.warn('grok.no_request_id');
-          const ageMinutes = (Date.now() - new Date(gen.created_at).getTime()) / 60000;
+          const ageMinutes = getGenerationAgeMinutes(gen.created_at, gen.request_id);
           if (ageMinutes > grokTimeoutMinutes) {
             await markAsFailed(supabase, gen, `No request_id after ${Math.round(ageMinutes)} min`, genLogger);
             results.push({ generation_id: gen.id, previous_status: "processing", new_status: "failed", success: false, error: "No request_id" });
@@ -125,7 +154,26 @@ serve(async (req) => {
 
         if (!pollRes.ok) {
           const errText = await pollRes.text();
+          const ageMinutes = getGenerationAgeMinutes(gen.created_at, gen.request_id);
+          const failureReason = classifyGrokPollHttpFailure({
+            statusCode: pollRes.status,
+            ageMinutes,
+            timeoutMinutes: grokTimeoutMinutes,
+          });
           genLogger.warn('grok.poll_http_error', { metadata: { status: pollRes.status, body: errText.substring(0, 200) } });
+
+          if (failureReason) {
+            await markAsFailed(supabase, gen, failureReason, genLogger);
+            results.push({
+              generation_id: gen.id,
+              previous_status: "processing",
+              new_status: "failed",
+              success: false,
+              error: toClientSafeMessage(failureReason),
+            });
+            continue;
+          }
+
           results.push({ generation_id: gen.id, previous_status: "processing", new_status: "processing", success: false, error: `HTTP ${pollRes.status}` });
           await supabase.from("generations").update({
             poll_count: gen.poll_count + 1,
@@ -185,11 +233,16 @@ serve(async (req) => {
           results.push({ generation_id: gen.id, previous_status: "processing", new_status: "completed", success: true });
 
         } else if (grokData.status === "expired") {
-          await markAsFailed(supabase, gen, "Grok generation expired", genLogger);
+          await markAsFailed(
+            supabase,
+            gen,
+            "This video took too long and expired. Please try again.",
+            genLogger,
+          );
           results.push({ generation_id: gen.id, previous_status: "processing", new_status: "failed", success: false, error: "expired" });
 
         } else {
-          const ageMinutes = (Date.now() - new Date(gen.created_at).getTime()) / 60000;
+          const ageMinutes = getGenerationAgeMinutes(gen.created_at, gen.request_id);
           if (ageMinutes > grokTimeoutMinutes) {
             genLogger.warn('grok.timeout', { metadata: { age_minutes: ageMinutes } });
             await markAsFailed(supabase, gen, `Generation timed out after ${Math.round(ageMinutes)} minutes`, genLogger);
@@ -210,7 +263,13 @@ serve(async (req) => {
 
       } catch (error) {
         genLogger.error('poll.error', error instanceof Error ? error : new Error(String(error)));
-        results.push({ generation_id: gen.id, previous_status: "processing", new_status: "processing", success: false, error: error instanceof Error ? error.message : "Unknown error" });
+        results.push({
+          generation_id: gen.id,
+          previous_status: "processing",
+          new_status: "processing",
+          success: false,
+          error: toClientSafeMessage(error instanceof Error ? error.message : "Unknown error"),
+        });
       }
     }
 
@@ -230,7 +289,9 @@ serve(async (req) => {
   } catch (error) {
     logger.error('cron.unhandled_error', error instanceof Error ? error : new Error(String(error)));
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({
+        error: toClientSafeMessage(error instanceof Error ? error.message : "Unknown error"),
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
@@ -249,10 +310,11 @@ async function updatePipelineExecution(supabase: any, gen: Generation, status: "
 // deno-lint-ignore no-explicit-any
 async function markAsFailed(supabase: any, gen: Generation, reason: string, logger: Logger) {
   const currentErrorLog = Array.isArray(gen.error_log) ? gen.error_log : [];
+  const clientReason = toClientSafeMessage(reason);
 
   await supabase.from("generations").update({
     status: "failed",
-    error_message: reason,
+    error_message: clientReason,
     last_error_at: new Date().toISOString(),
     error_log: [...currentErrorLog, ...logger.getLogs()],
   }).eq("id", gen.id);
@@ -260,12 +322,12 @@ async function markAsFailed(supabase: any, gen: Generation, reason: string, logg
   await supabase.from("failed_generations").insert({
     original_generation_id: gen.id,
     device_id: gen.device_id,
-    failure_reason: reason,
-    final_error_message: reason,
+    failure_reason: "generation_failed",
+    final_error_message: clientReason,
     error_log: [...currentErrorLog, ...logger.getLogs()],
     retry_count: gen.retry_count,
   });
 
-  await updatePipelineExecution(supabase, gen, "failed", reason);
+  await updatePipelineExecution(supabase, gen, "failed", clientReason);
   logger.info('generation.moved_to_dlq', { generation_id: gen.id });
 }

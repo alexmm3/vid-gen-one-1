@@ -12,6 +12,9 @@ import SwiftUI
 extension Font {
     // MARK: - Display Fonts (Bold & Impactful)
     
+    /// 44pt, System, Black - Cinematic hero titles (onboarding)
+    static let videoDisplayHero = Font.system(size: 44, weight: .black, design: .default)
+    
     /// 32pt, System, Black - For main titles
     static let videoDisplayLarge = Font.system(size: 32, weight: .black, design: .default)
     
@@ -89,11 +92,12 @@ extension View {
             .lineSpacing(3)
     }
     
-    /// Apply caption style
+    /// Apply caption style with editorial tracking
     func videoCaptionStyle() -> some View {
         self
             .font(.videoCaption)
             .foregroundColor(.videoTextTertiary)
+            .tracking(0.3)
     }
     
     /// Apply button text style

@@ -105,7 +105,7 @@ final class ToastManager: ObservableObject {
         }
         
         show(Toast(
-            message: "Your video just dropped! Tap to watch",
+            message: "Video ready! Tap to watch",
             icon: "sparkles",
             type: .success,
             action: .navigateToMyVideos
