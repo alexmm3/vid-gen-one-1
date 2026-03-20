@@ -38,6 +38,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Keys & secrets
+.keys/
+
 # Environment files
 .env
 .env.local

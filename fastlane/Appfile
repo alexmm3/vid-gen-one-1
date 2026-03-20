@@ -1,0 +1,3 @@
+app_identifier("com.alexm.videoeffects1")
+apple_id("") # Not needed with API key auth
+team_id("4CB8XNCYXB")
