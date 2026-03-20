@@ -67,6 +67,7 @@ final class SubscriptionValidationService {
                 productId: result.subscription?.productId,
                 expiresAt: result.subscription?.expiresAt,
                 generationsRemaining: result.subscription?.generationsRemaining,
+                generationsUsed: result.subscription?.generationsUsed,
                 generationLimit: result.subscription?.plan?.generationLimit,
                 planName: result.subscription?.plan?.planName
             )
@@ -77,6 +78,7 @@ final class SubscriptionValidationService {
                 productId: nil,
                 expiresAt: nil,
                 generationsRemaining: nil,
+                generationsUsed: nil,
                 generationLimit: nil,
                 planName: nil
             )
@@ -91,6 +93,7 @@ struct ValidationResult {
     let productId: String?
     let expiresAt: String?
     let generationsRemaining: Int?
+    let generationsUsed: Int?
     let generationLimit: Int?
     let planName: String?
 }
@@ -127,13 +130,15 @@ private struct ValidationResponse: Decodable {
         let environment: String
         let plan: PlanInfo?
         let generationsRemaining: Int?
-        
+        let generationsUsed: Int?
+
         enum CodingKeys: String, CodingKey {
             case productId = "product_id"
             case originalTransactionId = "original_transaction_id"
             case expiresAt = "expires_at"
             case status, environment, plan
             case generationsRemaining = "generations_remaining"
+            case generationsUsed = "generations_used"
         }
     }
     

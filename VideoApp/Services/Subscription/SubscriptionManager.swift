@@ -313,7 +313,9 @@ final class SubscriptionManager: ObservableObject {
                 AppState.shared.setPremiumStatus(
                     true,
                     generationsRemaining: result.generationsRemaining,
-                    generationLimit: result.generationLimit
+                    generationsUsed: result.generationsUsed,
+                    generationLimit: result.generationLimit,
+                    expiresAt: result.expiresAt
                 )
             } else {
                 // Backend says subscription expired — clear local state
