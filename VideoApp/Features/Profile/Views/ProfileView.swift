@@ -63,7 +63,7 @@ struct ProfileView: View {
                         .font(.videoHeadline)
                         .foregroundColor(.white)
                     
-                    Text("HD video  ·  40 generations  ·  All effects")
+                    Text("HD video  ·  All effects  ·  Priority processing")
                         .font(.videoCaption)
                         .foregroundColor(.white.opacity(0.45))
                         .tracking(0.3)
