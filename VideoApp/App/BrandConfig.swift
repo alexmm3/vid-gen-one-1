@@ -29,10 +29,10 @@ enum BrandConfig {
     static let appStoreId = ""
 
     static let weeklyProductId = ""
-    static let yearlyProductId = ""
+    static let monthlyProductId = ""
 
     static var allProductIds: [String] {
-        [weeklyProductId, yearlyProductId]
+        [weeklyProductId, monthlyProductId]
     }
 
     // MARK: - Support & Legal

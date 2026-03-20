@@ -22,7 +22,7 @@ enum Secrets {
     // MARK: - App Store Configuration
     static let appStoreId = BrandConfig.appStoreId
     static let weeklyProductId = BrandConfig.weeklyProductId
-    static let yearlyProductId = BrandConfig.yearlyProductId
+    static let monthlyProductId = BrandConfig.monthlyProductId
     
     // MARK: - Support & Legal
     static let supportEmail = BrandConfig.supportEmail
