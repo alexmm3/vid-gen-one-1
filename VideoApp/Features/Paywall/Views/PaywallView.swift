@@ -145,7 +145,12 @@ struct PaywallView: View {
     
     private var benefitsSection: some View {
         VStack(alignment: .leading, spacing: VideoSpacing.md) {
-            benefitRow(icon: "video.badge.plus", title: "Up to 50 Generations", subtitle: "Available with the monthly plan")
+            benefitRow(
+                icon: "video.badge.plus",
+                title: viewModel.planInfo(for: .monthly)
+                    .map { "Up to \($0.generationLimit) Generations" } ?? "Up to 50 Generations",
+                subtitle: "Available with the monthly plan"
+            )
             benefitRow(icon: "bolt.fill", title: "Priority Processing", subtitle: "Faster generation times")
             benefitRow(icon: "flame.fill", title: "Trending Effects", subtitle: "Access exclusive AI effects")
             benefitRow(icon: "sparkles", title: "HD Quality", subtitle: "High quality video output")

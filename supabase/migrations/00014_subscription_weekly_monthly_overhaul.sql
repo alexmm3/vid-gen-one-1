@@ -19,7 +19,7 @@ ALTER TABLE public.subscription_plans
 
 UPDATE public.subscription_plans
    SET is_active = false
- WHERE name = 'Yearly';
+ WHERE LOWER(name) = 'yearly';
 
 -- ---------------------------------------------------------------------------
 -- 3. Upsert Weekly plan
