@@ -13,7 +13,7 @@ final class PaywallViewModel: ObservableObject {
     // MARK: - Published Properties
     @Published var products: [Product] = []
     @Published var planInfos: [SubscriptionPlanInfo] = []
-    @Published var selectedPlan: SubscriptionPlan = .yearly
+    @Published var selectedPlan: SubscriptionPlan = .monthly
     @Published var isLoading = false
     @Published var isPurchasing = false
     @Published var error: String?
@@ -30,8 +30,8 @@ final class PaywallViewModel: ObservableObject {
         products.first { $0.id == SubscriptionPlan.weekly.productId }
     }
     
-    var yearlyProduct: Product? {
-        products.first { $0.id == SubscriptionPlan.yearly.productId }
+    var monthlyProduct: Product? {
+        products.first { $0.id == SubscriptionPlan.monthly.productId }
     }
     
     var selectedProduct: Product? {
@@ -85,7 +85,7 @@ final class PaywallViewModel: ObservableObject {
         isPurchasing = true
         
         // Track start
-        let plan: AnalyticsEvent.SubscriptionPlan = selectedPlan == .weekly ? .weekly : .yearly
+        let plan: AnalyticsEvent.SubscriptionPlan = selectedPlan == .weekly ? .weekly : .monthly
         Analytics.track(.purchaseStarted(plan: plan))
         
         // Create a delegate wrapper to handle callbacks
