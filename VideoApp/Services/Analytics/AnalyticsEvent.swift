@@ -72,7 +72,7 @@ enum AnalyticsEvent {
     
     enum SubscriptionPlan: String {
         case weekly
-        case yearly
+        case monthly
     }
     
     enum PhotoSource: String {

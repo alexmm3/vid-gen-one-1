@@ -142,7 +142,7 @@ final class SubscriptionManager: ObservableObject {
                     delegate?.purchasedSuccessfully(with: productId, transactionId: transactionId)
                     
                     // Track analytics
-                    let plan: AnalyticsEvent.SubscriptionPlan = productId.contains("weekly") ? .weekly : .yearly
+                    let plan: AnalyticsEvent.SubscriptionPlan = productId.contains("weekly") ? .weekly : .monthly
                     Analytics.track(.purchaseCompleted(plan: plan, transactionId: String(transactionId)))
                     
                     print("✅ SubscriptionManager: Purchase successful - \(productId)")
