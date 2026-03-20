@@ -1,4 +1,4 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { toClientSafeMessage } from "./client-safe-message.ts";
 import { Logger } from "./logger.ts";
 import { executeGeminiImage } from "./providers/gemini-image.ts";
 import { executeGeminiVision } from "./providers/gemini-vision.ts";
@@ -12,6 +12,7 @@ import {
   getModelOverride,
   type GenerationGlobals,
 } from "./generation-globals.ts";
+import type { SupabaseClientLike } from "./supabase-client.ts";
 
 // deno-lint-ignore no-explicit-any
 type Json = Record<string, any>;
@@ -143,7 +144,7 @@ function substituteTemplate(template: string, context: PipelineContext): string 
 async function executeStep(
   step: PipelineStep,
   context: PipelineContext,
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClientLike,
   logger: Logger,
   pipelineExecutionId: string,
   globals: GenerationGlobals,
@@ -282,7 +283,7 @@ export async function runPipeline(
   pipelineId: string,
   generationId: string,
   context: PipelineContext,
-  supabase: ReturnType<typeof createClient>,
+  supabase: SupabaseClientLike,
   logger: Logger,
 ): Promise<PipelineResult> {
   logger.info("pipeline.start", { metadata: { pipeline_id: pipelineId, generation_id: generationId } });
@@ -436,7 +437,7 @@ export async function runPipeline(
           .from("pipeline_step_executions")
           .update({
             status: "failed",
-            error_message: errMsg,
+            error_message: toClientSafeMessage(errMsg),
             completed_at: new Date().toISOString(),
             duration_ms: durationMs,
           })
@@ -450,7 +451,7 @@ export async function runPipeline(
           .from("pipeline_executions")
           .update({
             status: "failed",
-            error_message: `Step "${step.name}" failed: ${errMsg}`,
+            error_message: toClientSafeMessage(`Step "${step.name}" failed: ${errMsg}`),
             completed_at: new Date().toISOString(),
           })
           .eq("id", pipelineExecutionId);

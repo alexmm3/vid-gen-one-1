@@ -2,6 +2,11 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Logger } from "../_shared/logger.ts";
 import { classifyGrokPollHttpFailure } from "../_shared/grok-polling.ts";
+import {
+  redactGenerationApiResponseForClient,
+  toClientSafeMessage,
+  toNullableClientSafeMessage,
+} from "../_shared/client-safe-message.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -153,7 +158,8 @@ serve(async (req) => {
           logger.info('grok.completed', { metadata: { output_url: finalVideoUrl } });
 
         } else if (grokData.status === "expired" || grokData.status === "failed" || grokData.status === "error") {
-          const errorMessage = grokData.error?.message || `Grok generation ${grokData.status}`;
+          const rawMessage = grokData.error?.message || `Video generation ${grokData.status}`;
+          const errorMessage = toClientSafeMessage(rawMessage);
           const updateData = {
             status: "failed",
             error_message: errorMessage,
@@ -169,7 +175,7 @@ serve(async (req) => {
           await supabase.from("failed_generations").insert({
             original_generation_id: generation.id,
             device_id: generation.device_id,
-            failure_reason: errorMessage,
+            failure_reason: `provider_terminal_${grokData.status}`,
             final_error_message: errorMessage,
             error_log: [...currentErrorLog, ...logger.getLogs()],
             retry_count: generation.retry_count || 0,
@@ -206,10 +212,11 @@ serve(async (req) => {
         logger.warn('grok.poll_http_error', { metadata: { status: pollRes.status, body: errText.substring(0, 200) } });
 
         if (failureReason) {
+          const safeFailure = toClientSafeMessage(failureReason);
           const currentErrorLog = Array.isArray(generation.error_log) ? generation.error_log : [];
           const updateData = {
             status: "failed",
-            error_message: failureReason,
+            error_message: safeFailure,
             poll_count: (generation.poll_count || 0) + 1,
             last_polled_at: new Date().toISOString(),
             last_error_at: new Date().toISOString(),
@@ -221,8 +228,8 @@ serve(async (req) => {
           await supabase.from("failed_generations").insert({
             original_generation_id: generation.id,
             device_id: generation.device_id,
-            failure_reason: failureReason,
-            final_error_message: failureReason,
+            failure_reason: `poll_http_${pollRes.status}`,
+            final_error_message: safeFailure,
             error_log: [...currentErrorLog, ...logger.getLogs()],
             retry_count: generation.retry_count || 0,
           });
@@ -230,7 +237,7 @@ serve(async (req) => {
           if (generation.pipeline_execution_id) {
             await supabase.from("pipeline_executions").update({
               status: "failed",
-              error_message: failureReason,
+              error_message: safeFailure,
               completed_at: new Date().toISOString(),
             }).eq("id", generation.pipeline_execution_id);
           }
@@ -242,14 +249,43 @@ serve(async (req) => {
 
     logger.info('generation.retrieved', { metadata: { status: generation.status } });
 
+    const {
+      api_response: rawApiResponse,
+      error_message: rawErrorMessage,
+      provider: _provider,
+      error_log: _errorLog,
+      prompt: _prompt,
+      input_payload: _inputPayload,
+      ...generationRest
+    } = generation as Record<string, unknown> & {
+      api_response?: unknown;
+      error_message?: unknown;
+      provider?: unknown;
+      error_log?: unknown;
+      prompt?: unknown;
+      input_payload?: unknown;
+    };
+
+    const clientBody: Record<string, unknown> = {
+      ...generationRest,
+      error_message: toNullableClientSafeMessage(rawErrorMessage),
+      request_id: logger.getRequestId(),
+    };
+    const safeApi = redactGenerationApiResponseForClient(rawApiResponse);
+    if (safeApi && Object.keys(safeApi).length > 0) {
+      clientBody.api_response = safeApi;
+    }
+
     return new Response(
-      JSON.stringify({ ...generation, request_id: logger.getRequestId() }),
+      JSON.stringify(clientBody),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error) {
     logger.error('request.unhandled_error', error instanceof Error ? error : new Error(String(error)));
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage = toClientSafeMessage(
+      error instanceof Error ? error.message : "Unknown error",
+    );
     return new Response(
       JSON.stringify({ error: errorMessage, request_id: logger.getRequestId() }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }

@@ -51,7 +51,7 @@ final class SubscriptionManager: ObservableObject {
     private var transactionUpdatesTask: Task<Void, Never>?
     private var lastProcessedTransactionId: UInt64?
     
-    /// Last known transaction ID for backend validation (stored in UserDefaults)
+    /// Last known original transaction ID for backend validation (stored in UserDefaults)
     private(set) var lastTransactionId: String? {
         get {
             UserDefaults.standard.string(forKey: Constant.lastTransactionIdKey)
@@ -125,17 +125,17 @@ final class SubscriptionManager: ObservableObject {
                 case .verified(let transaction):
                     let productId = transaction.productID
                     let transactionId = transaction.id
+                    let originalTransactionId = transaction.originalID
+                    let signedTransactionInfo = verification.jwsRepresentation
                     
                     currentProductId = productId
-                    lastTransactionId = String(transactionId)
+                    lastTransactionId = String(originalTransactionId)
                     
                     await transaction.finish()
                     
-                    // Register subscription with backend (sends product + expiry for reliable storage)
                     await validateWithBackend(
-                        originalTransactionId: String(transactionId),
-                        productId: productId,
-                        expiresDate: transaction.expirationDate
+                        originalTransactionId: String(originalTransactionId),
+                        signedTransactionInfo: signedTransactionInfo
                     )
                     
                     guard registerProcessedTransaction(transactionId) else { return }
@@ -172,20 +172,21 @@ final class SubscriptionManager: ObservableObject {
         Analytics.track(.restoreStarted)
         var restored = false
         
-        for await result in Transaction.currentEntitlements {
-            switch result {
+        for await verification in Transaction.currentEntitlements {
+            switch verification {
             case .verified(let transaction):
                 let productId = transaction.productID
+                let originalTransactionId = transaction.originalID
+                let signedTransactionInfo = verification.jwsRepresentation
                 
                 currentProductId = productId
-                lastTransactionId = String(transaction.id)
+                lastTransactionId = String(originalTransactionId)
                 
                 delegate?.restoredSuccessfully(with: productId)
                 await transaction.finish()
                 await validateWithBackend(
-                    originalTransactionId: String(transaction.id),
-                    productId: productId,
-                    expiresDate: transaction.expirationDate
+                    originalTransactionId: String(originalTransactionId),
+                    signedTransactionInfo: signedTransactionInfo
                 )
                 restored = true
                 
@@ -208,16 +209,14 @@ final class SubscriptionManager: ObservableObject {
     /// This ensures the backend always has the latest expiration date.
     func refreshSubscriptionStatus() async {
         // 1. Try StoreKit entitlements first — this is the source of truth
-        for await result in Transaction.currentEntitlements {
-            switch result {
+        for await verification in Transaction.currentEntitlements {
+            switch verification {
             case .verified(let transaction):
                 currentProductId = transaction.productID
-                lastTransactionId = String(transaction.id)
-                // Send full details so backend always has the latest expiration
+                lastTransactionId = String(transaction.originalID)
                 await validateWithBackend(
-                    originalTransactionId: String(transaction.id),
-                    productId: transaction.productID,
-                    expiresDate: transaction.expirationDate
+                    originalTransactionId: String(transaction.originalID),
+                    signedTransactionInfo: verification.jwsRepresentation
                 )
                 return
             case .unverified:
@@ -228,7 +227,10 @@ final class SubscriptionManager: ObservableObject {
         // 2. No StoreKit entitlements — check with backend using stored transaction
         //    (backend will verify if the subscription record is still valid)
         if let txId = lastTransactionId {
-            await validateWithBackend(originalTransactionId: txId)
+            await validateWithBackend(
+                originalTransactionId: txId,
+                clearStateOnInvalidResponse: true
+            )
             return
         }
         
@@ -241,30 +243,29 @@ final class SubscriptionManager: ObservableObject {
         transactionUpdatesTask?.cancel()
         
         transactionUpdatesTask = Task.detached { [weak self] in
-            for await update in Transaction.updates {
+            for await verification in Transaction.updates {
                 guard let self else { continue }
                 
-                if case .verified(let transaction) = update {
+                if case .verified(let transaction) = verification {
                     await transaction.finish()
                     
                     // Capture transaction data before crossing to MainActor
                     let productId = transaction.productID
                     let transactionId = transaction.id
-                    let expiresDate = transaction.expirationDate
+                    let originalTransactionId = transaction.originalID
+                    let signedTransactionInfo = verification.jwsRepresentation
                     
                     await MainActor.run {
                         self.currentProductId = productId
-                        self.lastTransactionId = String(transactionId)
+                        self.lastTransactionId = String(originalTransactionId)
                         
                         guard self.registerProcessedTransaction(transactionId) else { return }
                         self.delegate?.purchasedSuccessfully(with: productId, transactionId: transactionId)
                         
-                        // Register with backend (full details for reliable storage)
                         Task {
                             await self.validateWithBackend(
-                                originalTransactionId: String(transactionId),
-                                productId: productId,
-                                expiresDate: expiresDate
+                                originalTransactionId: String(originalTransactionId),
+                                signedTransactionInfo: signedTransactionInfo
                             )
                         }
                     }
@@ -294,14 +295,13 @@ final class SubscriptionManager: ObservableObject {
     
     private func validateWithBackend(
         originalTransactionId: String,
-        productId: String? = nil,
-        expiresDate: Date? = nil
+        signedTransactionInfo: String? = nil,
+        clearStateOnInvalidResponse: Bool = false
     ) async {
         do {
             let result = try await SubscriptionValidationService.shared.validateSubscription(
                 originalTransactionId: originalTransactionId,
-                productId: productId,
-                expiresDate: expiresDate,
+                signedTransactionInfo: signedTransactionInfo,
                 useSandbox: useSandboxForValidation
             )
             
@@ -323,7 +323,13 @@ final class SubscriptionManager: ObservableObject {
             }
         } catch {
             print("⚠️ SubscriptionManager: Backend validation failed - \(error)")
-            // Network error — keep whatever state we have, don't clear
+            if clearStateOnInvalidResponse,
+               let validationError = error as? ValidationError,
+               validationError == .invalidResponse {
+                currentProductId = nil
+                lastTransactionId = nil
+                AppState.shared.setPremiumStatus(false)
+            }
         }
     }
     

@@ -4,6 +4,11 @@ import { Logger } from "../_shared/logger.ts";
 import { checkDeviceSubscription } from "../_shared/subscription-check.ts";
 import { isValidPublicUrl } from "../_shared/url-utils.ts";
 import { startGeneration } from "../_shared/start-generation.ts";
+import {
+  redactGenerationApiResponseForClient,
+  toClientSafeMessage,
+} from "../_shared/client-safe-message.ts";
+import type { SupabaseClientLike } from "../_shared/supabase-client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,7 +36,7 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase: SupabaseClientLike = createClient(supabaseUrl, supabaseKey);
     const body: GenerateVideoRequest = await req.json();
 
     const { device_id, effect_id, input_image_url, secondary_image_url, user_prompt, detected_aspect_ratio } = body;
@@ -102,7 +107,11 @@ serve(async (req) => {
       finalPrompt = finalPrompt.replace("{{user_prompt}}", "").trim();
     }
 
-    let { data: device } = await supabase.from("devices").select("id").eq("device_id", device_id).single();
+    let { data: device } = await supabase
+      .from("devices")
+      .select("id")
+      .eq("device_id", device_id)
+      .maybeSingle();
 
     if (!device) {
       logger.info("device.creating", { metadata: { device_id } });
@@ -115,7 +124,7 @@ serve(async (req) => {
       if (insertError) {
         logger.error("device.create_failed", insertError);
         return new Response(
-          JSON.stringify({ error: "Failed to create device record", request_id: logger.getRequestId(), details: insertError }),
+          JSON.stringify({ error: "Failed to create device record", request_id: logger.getRequestId() }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -144,31 +153,73 @@ serve(async (req) => {
       );
     }
 
-    const { data: generation, error: genError } = await supabase
-      .from("generations")
-      .insert({
-        device_id: device.id,
-        effect_id: effect_id,
-        input_image_url: input_image_url,
-        secondary_image_url: secondary_image_url || null,
-        reference_video_url: null,
-        prompt: finalPrompt,
-        status: "pending",
-        provider: "grok",
-        request_id: logger.getRequestId(),
-        input_payload: { user_prompt: user_prompt ?? null },
-        error_log: [],
+    const shouldEnforceLimit =
+      typeof subscriptionCheck.generationLimit === "number" &&
+      typeof subscriptionCheck.periodDays === "number";
+
+    const { data: reservation, error: reservationError } = await supabase
+      .rpc("reserve_generation_slot", {
+        p_device_id: device.id,
+        p_effect_id: effect_id,
+        p_input_image_url: input_image_url,
+        p_secondary_image_url: secondary_image_url || null,
+        p_reference_video_url: null,
+        p_prompt: finalPrompt,
+        p_provider: "grok",
+        p_request_id: logger.getRequestId(),
+        p_input_payload: {
+          user_prompt: user_prompt ?? null,
+          detected_aspect_ratio: detected_aspect_ratio ?? null,
+        },
+        p_character_orientation: "image",
+        p_copy_audio: false,
+        p_error_log: [],
+        p_enforce_limit: shouldEnforceLimit,
+        p_generation_limit: subscriptionCheck.generationLimit ?? null,
+        p_period_days: subscriptionCheck.periodDays ?? null,
       })
-      .select()
       .single();
 
-    if (genError) {
-      logger.error("generation.create_failed", genError);
+    if (reservationError || !reservation) {
+      logger.error(
+        "generation.reserve_failed",
+        reservationError || new Error("reserve_generation_slot returned no data")
+      );
       return new Response(
-        JSON.stringify({ error: "Failed to create generation record", request_id: logger.getRequestId(), details: genError }),
+        JSON.stringify({
+          error: "Failed to reserve generation slot",
+          request_id: logger.getRequestId(),
+        }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    if (!reservation.reserved || !reservation.generation_id) {
+      logger.warn("generation.limit_reached_race", {
+        metadata: {
+          device_id,
+          used: reservation.generations_used,
+          remaining: reservation.generations_remaining,
+        },
+      });
+      return new Response(
+        JSON.stringify({
+          error: `Generation limit reached (${subscriptionCheck.generationLimit} per ${subscriptionCheck.periodDays} days)`,
+          error_code: "LIMIT_REACHED",
+          limit: subscriptionCheck.generationLimit,
+          period_days: subscriptionCheck.periodDays,
+          used: reservation.generations_used ?? subscriptionCheck.generationsUsed,
+          remaining: reservation.generations_remaining ?? 0,
+          request_id: logger.getRequestId(),
+        }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const generation = {
+      id: reservation.generation_id as string,
+      pipeline_execution_id: reservation.pipeline_execution_id as string | null,
+    };
 
     logger.setGenerationId(generation.id);
     logger.info("generation.created", { metadata: { generation_id: generation.id } });
@@ -191,12 +242,18 @@ serve(async (req) => {
           success: false,
           generation_id: generation.id,
           status: "failed",
-          error: startResult.error,
+          error: toClientSafeMessage(startResult.error),
           request_id: logger.getRequestId(),
         }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const safeApi = startResult.providerRequestId
+      ? redactGenerationApiResponseForClient({
+        request_id: startResult.providerRequestId,
+      })
+      : null;
 
     return new Response(
       JSON.stringify({
@@ -204,18 +261,18 @@ serve(async (req) => {
         generation_id: generation.id,
         status: startResult.status,
         ...(startResult.pipelineExecutionId ? { pipeline_execution_id: startResult.pipelineExecutionId } : {}),
-        ...(startResult.providerRequestId
-          ? { api_response: { provider: "grok", request_id: startResult.providerRequestId } }
-          : {}),
+        ...(safeApi ? { api_response: safeApi } : {}),
         request_id: logger.getRequestId(),
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (error) {
     logger.error("request.unhandled_error", error instanceof Error ? error : new Error(String(error)));
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage = toClientSafeMessage(
+      error instanceof Error ? error.message : "Unknown error",
+    );
     return new Response(
-      JSON.stringify({ error: errorMessage, request_id: logger.getRequestId(), details: error }),
+      JSON.stringify({ error: errorMessage, request_id: logger.getRequestId() }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

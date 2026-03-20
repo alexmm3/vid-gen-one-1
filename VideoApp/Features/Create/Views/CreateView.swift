@@ -27,6 +27,19 @@ struct CreateView: View {
         return viewModel.allEffects.first { $0.id == id }
     }
 
+    private var warmedEffectIDs: Set<UUID> {
+        let effects = viewModel.allEffects
+        guard !effects.isEmpty else { return [] }
+
+        guard let id = centeredEffectID,
+              let idx = effects.firstIndex(where: { $0.id == id }) else {
+            return Set(effects.prefix(1).map(\.id))
+        }
+
+        let range = max(0, idx - 1)...min(effects.count - 1, idx + 1)
+        return Set(range.map { effects[$0].id })
+    }
+
     var body: some View {
         ZStack {
             Color.videoBackground.ignoresSafeArea()
@@ -89,7 +102,7 @@ struct CreateView: View {
                     ZStack {
                         // Ambient glow directly behind the active card
                         ambientGlow(cardWidth: cardWidth, cardHeight: cardHeight)
-                        
+
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: VideoSpacing.sm) {
                                 ForEach(viewModel.allEffects) { effect in
@@ -98,6 +111,8 @@ struct CreateView: View {
                                         cardWidth: cardWidth,
                                         cardHeight: cardHeight,
                                         isCentered: centeredEffectID == effect.id,
+                                        shouldLoadVideo: warmedEffectIDs.contains(effect.id),
+                                        shouldPlayVideo: centeredEffectID == effect.id,
                                         onSelect: {
                                             selectedEffect = effect
                                             showEffectGenerationView = true
@@ -161,6 +176,7 @@ struct CreateView: View {
         let videoRange = max(0, idx - 1)...min(effects.count - 1, idx + 1)
         let videoUrls = videoRange.compactMap { effects[$0].fullPreviewUrl }
         VideoCacheManager.shared.prefetch(urls: videoUrls)
+        VideoPosterFrameStore.shared.prefetch(urls: videoUrls)
     }
 
     // MARK: - Animated Effect Title
@@ -214,7 +230,7 @@ struct CreateView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
-    
+
     // MARK: - Loading Skeleton
 
     private var loadingOverlay: some View {
@@ -230,7 +246,7 @@ struct CreateView: View {
                         .fill(Color.videoSurface)
                         .frame(width: 140, height: 24)
                         .shimmer()
-                    
+
                     RoundedRectangle(cornerRadius: 4)
                         .fill(Color.videoSurface)
                         .frame(width: 200, height: 16)
@@ -255,46 +271,46 @@ struct CreateView: View {
 
 struct VideoPickerView: UIViewControllerRepresentable {
     let onSelect: (URL) -> Void
-    
+
     func makeUIViewController(context: Context) -> PHPickerViewController {
         var config = PHPickerConfiguration()
         config.selectionLimit = 1
         config.filter = .videos
-        
+
         let picker = PHPickerViewController(configuration: config)
         picker.delegate = context.coordinator
         return picker
     }
-    
+
     func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
-    
+
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
-    
+
     class Coordinator: NSObject, PHPickerViewControllerDelegate {
         let parent: VideoPickerView
-        
+
         init(_ parent: VideoPickerView) {
             self.parent = parent
         }
-        
+
         func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
             picker.dismiss(animated: true)
-            
+
             guard let provider = results.first?.itemProvider,
                   provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) else {
                 return
             }
-            
+
             provider.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { url, error in
                 guard let url = url else { return }
-                
+
                 // Copy to temp location (provider URL is temporary)
                 let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
                 try? FileManager.default.removeItem(at: tempURL)
                 try? FileManager.default.copyItem(at: url, to: tempURL)
-                
+
                 DispatchQueue.main.async {
                     self.parent.onSelect(tempURL)
                 }
@@ -311,18 +327,18 @@ struct UserVideosGridScreen: View {
     let userVideos: [LocalUserVideo]
     let onSelect: (LocalUserVideo) -> Void
     let onDelete: (LocalUserVideo) -> Void
-    
+
     @Environment(\.dismiss) private var dismiss
-    
+
     private let columns = [
         GridItem(.flexible(), spacing: VideoSpacing.sm),
         GridItem(.flexible(), spacing: VideoSpacing.sm)
     ]
-    
+
     var body: some View {
         ZStack {
             Color.videoBackground.ignoresSafeArea()
-            
+
             if userVideos.isEmpty {
                 emptyState
             } else {
@@ -342,24 +358,24 @@ struct UserVideosGridScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.dark, for: .navigationBar)
     }
-    
+
     private var emptyState: some View {
         VStack(spacing: VideoSpacing.md) {
             Image(systemName: "video.badge.plus")
                 .font(.system(size: 50))
                 .foregroundColor(.videoTextTertiary)
-            
+
             Text("No Videos Yet")
                 .font(.videoHeadline)
                 .foregroundColor(.videoTextPrimary)
-            
+
             Text("Upload your own videos\nto use as templates")
                 .font(.videoBody)
                 .foregroundColor(.videoTextSecondary)
                 .multilineTextAlignment(.center)
         }
     }
-    
+
     private func videoCard(for video: LocalUserVideo) -> some View {
         Button {
             HapticManager.shared.selection()
@@ -375,7 +391,7 @@ struct UserVideosGridScreen: View {
                     Rectangle()
                         .fill(Color.videoSurface)
                 }
-                
+
                 VStack {
                     Spacer()
                     HStack {

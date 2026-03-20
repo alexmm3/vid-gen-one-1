@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { toClientSafeMessage } from "../_shared/client-safe-message.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,7 +24,7 @@ serve(async (req) => {
 
     const grokApiKey = Deno.env.get("GROK_API_KEY");
     if (!grokApiKey) {
-      return new Response(JSON.stringify({ error: "GROK_API_KEY not configured" }), {
+      return new Response(JSON.stringify({ error: toClientSafeMessage("GROK_API_KEY not configured") }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -86,9 +87,10 @@ serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in generate-grok-image:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    return new Response(JSON.stringify({ error: toClientSafeMessage(msg) }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

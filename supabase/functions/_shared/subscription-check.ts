@@ -24,6 +24,15 @@ function getAdminDeviceId(): string | null {
   return Deno.env.get("ADMIN_DEVICE_ID") || null;
 }
 
+function getDebugPremiumDevicePrefix(): string | null {
+  const raw = Deno.env.get("DEBUG_PREMIUM_DEVICE_PREFIX")?.trim();
+  return raw ? raw : null;
+}
+
+export interface SubscriptionAccessOverride {
+  reason: "admin_device" | "debug_premium_device" | "subscription_checks_disabled";
+}
+
 async function isSubscriptionCheckEnabled(supabase: SupabaseClient): Promise<boolean> {
   const { data } = await supabase
     .from("system_config")
@@ -34,6 +43,28 @@ async function isSubscriptionCheckEnabled(supabase: SupabaseClient): Promise<boo
   if (!data) return true;
 
   return data.value === true || data.value === "true";
+}
+
+export async function getSubscriptionAccessOverride(
+  supabase: SupabaseClient,
+  deviceId: string
+): Promise<SubscriptionAccessOverride | null> {
+  const adminDeviceId = getAdminDeviceId();
+  if (adminDeviceId && deviceId === adminDeviceId) {
+    return { reason: "admin_device" };
+  }
+
+  const debugPremiumPrefix = getDebugPremiumDevicePrefix();
+  if (debugPremiumPrefix && deviceId.startsWith(debugPremiumPrefix)) {
+    return { reason: "debug_premium_device" };
+  }
+
+  const checkEnabled = await isSubscriptionCheckEnabled(supabase);
+  if (!checkEnabled) {
+    return { reason: "subscription_checks_disabled" };
+  }
+
+  return null;
 }
 
 async function countGenerationsInPeriod(
@@ -48,6 +79,23 @@ async function countGenerationsInPeriod(
     .eq("device_id", deviceUuid)
     .gte("created_at", periodStart.toISOString());
   return count || 0;
+}
+
+export async function getGenerationUsage(
+  supabase: SupabaseClient,
+  deviceUuid: string,
+  generationLimit: number,
+  periodDays: number | null
+): Promise<{ used: number; remaining: number }> {
+  if (periodDays === null) {
+    return { used: 0, remaining: -1 };
+  }
+
+  const used = await countGenerationsInPeriod(supabase, deviceUuid, periodDays);
+  return {
+    used,
+    remaining: Math.max(0, generationLimit - used),
+  };
 }
 
 async function validateGenerationLimits(
@@ -67,8 +115,12 @@ async function validateGenerationLimits(
     };
   }
 
-  const used = await countGenerationsInPeriod(supabase, deviceUuid, periodDays);
-  const remaining = Math.max(0, generationLimit - used);
+  const { used, remaining } = await getGenerationUsage(
+    supabase,
+    deviceUuid,
+    generationLimit,
+    periodDays
+  );
 
   if (remaining <= 0) {
     return {
@@ -180,13 +232,8 @@ export async function checkDeviceSubscription(
   deviceUuid: string,
   deviceId: string
 ): Promise<SubscriptionCheckResult> {
-  const adminDeviceId = getAdminDeviceId();
-  if (adminDeviceId && deviceId === adminDeviceId) {
-    return { valid: true, generationsRemaining: -1 };
-  }
-
-  const checkEnabled = await isSubscriptionCheckEnabled(supabase);
-  if (!checkEnabled) {
+  const accessOverride = await getSubscriptionAccessOverride(supabase, deviceId);
+  if (accessOverride) {
     return { valid: true, generationsRemaining: -1 };
   }
 

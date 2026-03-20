@@ -121,7 +121,7 @@ struct GeneratingView: View {
                             .id(currentTitleIndex)
                             .transition(.opacity)
                         
-                        Text("Usually takes 4–5 minutes")
+                        Text("Hold on tight for a minute...")
                             .font(.system(size: 14))
                             .foregroundColor(.white.opacity(0.5))
                     }
@@ -135,11 +135,10 @@ struct GeneratingView: View {
                     if canDismiss, let onDismiss = onDismiss {
                         VideoButton(
                             title: "Continue Browsing",
-                            icon: "arrow.left",
                             action: {
                                 onDismiss()
                             },
-                            style: .secondary
+                            style: .primary
                         )
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }

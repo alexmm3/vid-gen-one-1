@@ -1,8 +1,9 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Logger, withRetry } from "./logger.ts";
 import { runPipeline, type PipelineContext } from "./pipeline-orchestrator.ts";
 import { loadGenerationGlobals, applyVideoGlobals } from "./generation-globals.ts";
 import { resolveTargetAspectRatio } from "./aspect-ratio.ts";
+import { toClientSafeMessage } from "./client-safe-message.ts";
+import type { SupabaseClientLike } from "./supabase-client.ts";
 
 interface ProviderConfig {
   default_duration?: number;
@@ -56,10 +57,8 @@ interface RecoverableGenerationRow {
   pipeline_execution_id: string | null;
 }
 
-type SupabaseClient = ReturnType<typeof createClient>;
-
 async function loadProviderConfig(
-  supabase: SupabaseClient,
+  supabase: SupabaseClientLike,
   provider: string,
 ): Promise<ProviderConfig> {
   const { data } = await supabase
@@ -79,7 +78,7 @@ function stripLegacyUserPromptPlaceholder(template: string): string {
 }
 
 async function supersedePipelineExecution(
-  supabase: SupabaseClient,
+  supabase: SupabaseClientLike,
   pipelineExecutionId: string | null | undefined,
   logger: Logger,
 ) {
@@ -101,7 +100,7 @@ async function supersedePipelineExecution(
 }
 
 export async function startGeneration(
-  supabase: SupabaseClient,
+  supabase: SupabaseClientLike,
   logger: Logger,
   input: StartGenerationInput,
 ): Promise<StartGenerationResult> {
@@ -145,7 +144,7 @@ export async function startGeneration(
       await supersedePipelineExecution(supabase, existingPipelineExecutionId, logger);
 
       const targetAspectRatio = resolveTargetAspectRatio({
-        detectedAspectRatio,
+        detectedAspectRatio: detectedAspectRatio ?? undefined,
         effectDefaultAspectRatio: (effect.generation_params as Record<string, unknown> | undefined)?.aspect_ratio as
           | string
           | undefined,
@@ -213,11 +212,13 @@ export async function startGeneration(
       const errMsg = pipelineError instanceof Error ? pipelineError.message : String(pipelineError);
       logger.error("pipeline.failed", pipelineError instanceof Error ? pipelineError : new Error(errMsg));
 
+      const clientMsg = toClientSafeMessage(errMsg);
+
       await supabase
         .from("generations")
         .update({
           status: "failed",
-          error_message: `Pipeline failed: ${errMsg}`,
+          error_message: clientMsg,
           error_log: logger.getLogs(),
         })
         .eq("id", generationId);
@@ -226,7 +227,7 @@ export async function startGeneration(
         original_generation_id: generationId,
         device_id: deviceId,
         failure_reason: "pipeline_execution_failed",
-        final_error_message: errMsg,
+        final_error_message: clientMsg,
         error_log: logger.getLogs(),
         retry_count: 0,
       });
@@ -234,7 +235,7 @@ export async function startGeneration(
       return {
         success: false,
         status: "failed",
-        error: errMsg,
+        error: clientMsg,
       };
     }
   }
@@ -242,11 +243,12 @@ export async function startGeneration(
   const grokApiKey = Deno.env.get("GROK_API_KEY");
   if (!grokApiKey) {
     logger.error("config.missing", "GROK_API_KEY not configured");
+    const clientMsg = toClientSafeMessage("GROK_API_KEY not configured");
     await supabase
       .from("generations")
       .update({
         status: "failed",
-        error_message: "GROK_API_KEY not configured",
+        error_message: clientMsg,
         error_log: logger.getLogs(),
       })
       .eq("id", generationId);
@@ -254,7 +256,7 @@ export async function startGeneration(
     return {
       success: false,
       status: "failed",
-      error: "GROK_API_KEY not configured",
+      error: clientMsg,
     };
   }
 
@@ -326,11 +328,12 @@ The user has provided additional specific wishes for this video. You must mainta
 
   if ("error" in retryResult) {
     logger.error("grok.failed_permanently", retryResult.error);
+    const clientMsg = toClientSafeMessage(retryResult.error.message);
     await supabase
       .from("generations")
       .update({
         status: "failed",
-        error_message: retryResult.error.message,
+        error_message: clientMsg,
         retry_count: retryResult.attempts,
         last_error_at: new Date().toISOString(),
         error_log: logger.getLogs(),
@@ -341,7 +344,7 @@ The user has provided additional specific wishes for this video. You must mainta
       original_generation_id: generationId,
       device_id: deviceId,
       failure_reason: "grok_api_call_failed",
-      final_error_message: retryResult.error.message,
+      final_error_message: clientMsg,
       error_log: logger.getLogs(),
       retry_count: retryResult.attempts,
     });
@@ -349,7 +352,7 @@ The user has provided additional specific wishes for this video. You must mainta
     return {
       success: false,
       status: "failed",
-      error: retryResult.error.message,
+      error: clientMsg,
     };
   }
 
@@ -359,12 +362,13 @@ The user has provided additional specific wishes for this video. You must mainta
   if (!grokResult.request_id) {
     const errMsg = grokResult.error?.message || "Grok did not return a request_id";
     logger.error("grok.no_request_id", errMsg);
+    const clientMsg = toClientSafeMessage(errMsg);
 
     await supabase
       .from("generations")
       .update({
         status: "failed",
-        error_message: errMsg,
+        error_message: clientMsg,
         api_response: grokResult,
         error_log: logger.getLogs(),
       })
@@ -373,7 +377,7 @@ The user has provided additional specific wishes for this video. You must mainta
     return {
       success: false,
       status: "failed",
-      error: errMsg,
+      error: clientMsg,
     };
   }
 
@@ -398,7 +402,7 @@ The user has provided additional specific wishes for this video. You must mainta
 }
 
 export async function recoverGenerationStart(
-  supabase: SupabaseClient,
+  supabase: SupabaseClientLike,
   logger: Logger,
   generationId: string,
 ): Promise<StartGenerationResult | null> {

@@ -5,10 +5,10 @@
 -- application to function. No effects, no videos, no user content.
 -- =============================================================================
 
--- System config: subscription checking disabled by default for development
+-- System config: keep subscription checks enabled by default.
 INSERT INTO public.system_config (key, value, description)
 VALUES
-  ('subscription_check_enabled', 'false', 'Enable/disable subscription validation on generation requests'),
+  ('subscription_check_enabled', 'true', 'Enable/disable subscription validation on generation requests'),
   ('maintenance_mode', 'false', 'When true, all generation requests are rejected with a maintenance message')
 ON CONFLICT (key) DO NOTHING;
 

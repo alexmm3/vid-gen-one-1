@@ -1,5 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { toClientSafeMessage } from "../_shared/client-safe-message.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifySignedTransactionInfo } from "../_shared/apple-verification.ts";
+import {
+  getGenerationUsage,
+  getSubscriptionAccessOverride,
+} from "../_shared/subscription-check.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,8 +15,7 @@ const corsHeaders = {
 interface ValidationRequest {
   device_id: string;
   original_transaction_id: string;
-  product_id?: string;
-  expires_date?: string; // ISO 8601
+  signed_transaction_info?: string;
   use_sandbox?: boolean;
 }
 
@@ -25,9 +30,11 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body: ValidationRequest = await req.json();
-    const { device_id, original_transaction_id, product_id, expires_date, use_sandbox = false } = body;
+    const { device_id, original_transaction_id, signed_transaction_info, use_sandbox = false } = body;
 
-    console.log(`[validate-apple-subscription] device_id=${device_id}, product_id=${product_id || 'N/A'}, expires_date=${expires_date || 'N/A'}, txn=${original_transaction_id}`);
+    console.log(
+      `[validate-apple-subscription] device_id=${device_id}, has_signed_transaction_info=${Boolean(signed_transaction_info)}, txn=${original_transaction_id}`,
+    );
 
     // Validate required fields
     if (!device_id || !original_transaction_id) {
@@ -42,7 +49,7 @@ serve(async (req) => {
       .from("devices")
       .select("id")
       .eq("device_id", device_id)
-      .single();
+      .maybeSingle();
 
     if (!device) {
       const { data: newDevice, error: insertError } = await supabase
@@ -60,22 +67,51 @@ serve(async (req) => {
       device = newDevice;
     }
 
-    // ── MODE A: Register / update subscription (client sent product details) ──
-    if (product_id && expires_date) {
-      console.log(`[validate-apple-subscription] Registering subscription: product=${product_id}, expires=${expires_date}`);
+    // ── MODE A: Register / update subscription using Apple's signed transaction ──
+    if (signed_transaction_info) {
+      let verifiedTransaction;
+      try {
+        verifiedTransaction = await verifySignedTransactionInfo(
+          signed_transaction_info,
+          use_sandbox
+        );
+      } catch (verificationError) {
+        console.error("[validate-apple-subscription] Signed transaction verification failed:", verificationError);
+        return new Response(
+          JSON.stringify({
+            valid: false,
+            error: verificationError instanceof Error
+              ? verificationError.message
+              : "Apple signed transaction could not be verified.",
+            error_code: "APPLE_TRANSACTION_INVALID",
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
-      // Look up the plan for this Apple product
+      console.log(
+        `[validate-apple-subscription] Verified transaction: product=${verifiedTransaction.productId}, environment=${verifiedTransaction.environment}, txn=${verifiedTransaction.originalTransactionId}`,
+      );
+
       const { data: productMapping, error: mappingError } = await supabase
         .from("apple_product_mappings")
         .select("plan_id, subscription_plans(id, name, generation_limit, period_days)")
-        .eq("apple_product_id", product_id)
+        .eq("apple_product_id", verifiedTransaction.productId)
         .single();
 
       if (mappingError || !productMapping) {
-        console.error("[validate-apple-subscription] No plan mapping for product:", product_id, mappingError);
+        console.error(
+          "[validate-apple-subscription] No plan mapping for product:",
+          verifiedTransaction.productId,
+          mappingError,
+        );
         return new Response(
-          JSON.stringify({ valid: false, error: `No plan mapping found for product: ${product_id}` }),
-          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({
+            valid: false,
+            error: `No plan mapping found for product: ${verifiedTransaction.productId}`,
+            error_code: "PRODUCT_NOT_MAPPED",
+          }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -86,17 +122,30 @@ serve(async (req) => {
         period_days: number | null;
       };
 
-      const expiresAt = new Date(expires_date);
+      const effectiveExpiresAt = verifiedTransaction.revokedAt || verifiedTransaction.expiresAt;
+      if (!effectiveExpiresAt) {
+        return new Response(
+          JSON.stringify({
+            valid: false,
+            error: "Verified Apple transaction is missing expires_at.",
+            error_code: "APPLE_TRANSACTION_MISSING_EXPIRATION",
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
-      // Upsert device_subscriptions — one row per device
+      const startedAt = verifiedTransaction.payload.originalPurchaseDate
+        ? new Date(verifiedTransaction.payload.originalPurchaseDate).toISOString()
+        : new Date().toISOString();
+
       const { error: upsertError } = await supabase
         .from("device_subscriptions")
         .upsert({
           device_id: device.id,
           plan_id: productMapping.plan_id,
-          expires_at: expiresAt.toISOString(),
-          started_at: new Date().toISOString(),
-          original_transaction_id: original_transaction_id,
+          expires_at: effectiveExpiresAt,
+          started_at: startedAt,
+          original_transaction_id: verifiedTransaction.originalTransactionId,
         }, {
           onConflict: "device_id",
         });
@@ -109,31 +158,61 @@ serve(async (req) => {
         );
       }
 
-      console.log(`[validate-apple-subscription] Subscription stored successfully. Plan: ${plan.name}, Expires: ${expiresAt.toISOString()}`);
+      const { error: receiptUpsertError } = await supabase
+        .from("apple_receipts")
+        .upsert({
+          device_id: device.id,
+          original_transaction_id: verifiedTransaction.originalTransactionId,
+          product_id: verifiedTransaction.productId,
+          expires_at: effectiveExpiresAt,
+          environment: verifiedTransaction.environment,
+          last_verified_at: new Date().toISOString(),
+          raw_transaction_info: {
+            signed_transaction_info: verifiedTransaction.signedTransactionInfo,
+            verified_transaction: verifiedTransaction.payload,
+          },
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: "device_id,original_transaction_id",
+        });
 
-      // Calculate generations remaining
-      let generationsRemaining: number | null = null;
-      if (plan.period_days !== null) {
-        const periodStart = new Date(Date.now() - (plan.period_days * 24 * 60 * 60 * 1000));
-        const { count } = await supabase
-          .from("generations")
-          .select("*", { count: "exact", head: true })
-          .eq("device_id", device.id)
-          .gte("created_at", periodStart.toISOString());
-        generationsRemaining = Math.max(0, plan.generation_limit - (count || 0));
-      } else {
-        generationsRemaining = -1; // Unlimited
+      if (receiptUpsertError) {
+        console.error("[validate-apple-subscription] Receipt upsert failed:", receiptUpsertError);
+        return new Response(
+          JSON.stringify({ valid: false, error: "Failed to store Apple receipt", error_code: "RECEIPT_STORE_FAILED" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
+
+      console.log(
+        `[validate-apple-subscription] Subscription stored successfully. Plan: ${plan.name}, Expires: ${effectiveExpiresAt}`,
+      );
+
+      const { remaining: generationsRemaining } = await getGenerationUsage(
+        supabase,
+        device.id,
+        plan.generation_limit,
+        plan.period_days
+      );
+
+      const isExpired = new Date(effectiveExpiresAt) < new Date();
+      const isRevoked = Boolean(verifiedTransaction.revokedAt);
 
       return new Response(
         JSON.stringify({
-          valid: true,
+          valid: !isExpired && !isRevoked,
+          error: isRevoked
+            ? "Subscription was revoked by Apple."
+            : (isExpired ? "Subscription expired" : null),
+          error_code: isRevoked
+            ? "SUBSCRIPTION_REVOKED"
+            : (isExpired ? "SUBSCRIPTION_EXPIRED" : null),
           subscription: {
-            product_id,
-            original_transaction_id,
-            expires_at: expiresAt.toISOString(),
-            status: 1, // Active
-            environment: use_sandbox ? "Sandbox" : "Production",
+            product_id: verifiedTransaction.productId,
+            original_transaction_id: verifiedTransaction.originalTransactionId,
+            expires_at: effectiveExpiresAt,
+            status: !isExpired && !isRevoked ? 1 : 0,
+            environment: verifiedTransaction.environment,
             plan: {
               plan_id: productMapping.plan_id,
               plan_name: plan.name,
@@ -150,26 +229,51 @@ serve(async (req) => {
     // ── MODE B: Check-only (no product details — verify stored subscription) ──
     console.log(`[validate-apple-subscription] Check-only mode for device ${device_id}`);
 
-    const now = new Date().toISOString();
+    const accessOverride = await getSubscriptionAccessOverride(supabase, device_id);
+    if (accessOverride) {
+      const environment =
+        accessOverride.reason === "debug_premium_device"
+          ? "Debug"
+          : accessOverride.reason === "admin_device"
+            ? "Admin"
+            : "Bypass";
+
+      return new Response(
+        JSON.stringify({
+          valid: true,
+          environment,
+          subscription: {
+            product_id: null,
+            original_transaction_id: original_transaction_id,
+            expires_at: null,
+            status: 1,
+            environment,
+            plan: null,
+            generations_remaining: -1,
+          },
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const { data: subscription } = await supabase
       .from("device_subscriptions")
-      .select("plan_id, expires_at, subscription_plans(name, generation_limit, period_days)")
+      .select("plan_id, expires_at, original_transaction_id, subscription_plans(name, generation_limit, period_days)")
       .eq("device_id", device.id)
       .maybeSingle();
 
     if (!subscription) {
       console.log(`[validate-apple-subscription] No subscription found for device ${device_id}`);
       return new Response(
-        JSON.stringify({ valid: false, error: "No subscription found" }),
+        JSON.stringify({ valid: false, error: "No subscription found", error_code: "NO_SUBSCRIPTION" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Check expiration (null expires_at = never expires, e.g. admin/unlimited)
     if (subscription.expires_at && new Date(subscription.expires_at) < new Date()) {
       console.log(`[validate-apple-subscription] Subscription expired at ${subscription.expires_at}`);
       return new Response(
-        JSON.stringify({ valid: false, error: "Subscription expired" }),
+        JSON.stringify({ valid: false, error: "Subscription expired", error_code: "SUBSCRIPTION_EXPIRED" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -180,19 +284,20 @@ serve(async (req) => {
       period_days: number | null;
     };
 
-    // Calculate generations remaining
-    let generationsRemaining: number | null = null;
-    if (plan.period_days !== null) {
-      const periodStart = new Date(Date.now() - (plan.period_days * 24 * 60 * 60 * 1000));
-      const { count } = await supabase
-        .from("generations")
-        .select("*", { count: "exact", head: true })
-        .eq("device_id", device.id)
-        .gte("created_at", periodStart.toISOString());
-      generationsRemaining = Math.max(0, plan.generation_limit - (count || 0));
-    } else {
-      generationsRemaining = -1;
-    }
+    const { data: latestReceipt } = await supabase
+      .from("apple_receipts")
+      .select("product_id, original_transaction_id, environment")
+      .eq("device_id", device.id)
+      .order("expires_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const { remaining: generationsRemaining } = await getGenerationUsage(
+      supabase,
+      device.id,
+      plan.generation_limit,
+      plan.period_days
+    );
 
     console.log(`[validate-apple-subscription] Valid subscription. Plan: ${plan.name}, Remaining: ${generationsRemaining}`);
 
@@ -200,11 +305,11 @@ serve(async (req) => {
       JSON.stringify({
         valid: true,
         subscription: {
-          product_id: null,
-          original_transaction_id,
+          product_id: latestReceipt?.product_id ?? null,
+          original_transaction_id: latestReceipt?.original_transaction_id ?? subscription.original_transaction_id ?? original_transaction_id,
           expires_at: subscription.expires_at,
           status: 1,
-          environment: use_sandbox ? "Sandbox" : "Production",
+          environment: latestReceipt?.environment ?? (use_sandbox ? "Sandbox" : "Production"),
           plan: {
             plan_id: subscription.plan_id,
             plan_name: plan.name,
@@ -219,7 +324,10 @@ serve(async (req) => {
   } catch (error) {
     console.error("[validate-apple-subscription] Unhandled error:", error);
     return new Response(
-      JSON.stringify({ valid: false, error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({
+        valid: false,
+        error: toClientSafeMessage(error instanceof Error ? error.message : "Unknown error"),
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

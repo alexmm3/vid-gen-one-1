@@ -395,8 +395,7 @@ struct HistoryDetailView: View {
     private func iconOpticalOffset(for icon: String) -> CGFloat {
         switch icon {
         case "square.and.arrow.down", "square.and.arrow.up":
-            // These SF Symbols read slightly top-heavy inside circular buttons.
-            return 1
+            return -2
         default:
             return 0
         }

@@ -12,9 +12,11 @@ struct EffectShowcaseCard: View {
     let cardWidth: CGFloat
     let cardHeight: CGFloat
     let isCentered: Bool
+    let shouldLoadVideo: Bool
+    let shouldPlayVideo: Bool
     let onSelect: () -> Void
 
-    @State private var showVideoPlayer = false
+    @State private var isVideoReadyForDisplay = false
 
     var body: some View {
         Button(action: {
@@ -31,16 +33,15 @@ struct EffectShowcaseCard: View {
         }
         .buttonStyle(ScaleButtonStyle(scale: 0.97))
         .onAppear {
-            showVideoPlayer = isCentered
+            isVideoReadyForDisplay = false
         }
-        .onChange(of: isCentered) { _, centered in
-            if !centered { showVideoPlayer = false }
+        .onChange(of: shouldLoadVideo) { _, shouldLoad in
+            if !shouldLoad {
+                isVideoReadyForDisplay = false
+            }
         }
-        .task(id: isCentered) {
-            guard isCentered, !showVideoPlayer else { return }
-            try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled else { return }
-            showVideoPlayer = true
+        .onChange(of: effect.fullPreviewUrl) { _, _ in
+            isVideoReadyForDisplay = false
         }
     }
 
@@ -48,14 +49,28 @@ struct EffectShowcaseCard: View {
 
     private var videoLayer: some View {
         ZStack {
-            Color.videoSurface
-
-            if showVideoPlayer {
-                LoopingRemoteVideoPlayer(url: effect.fullPreviewUrl)
-                    .transition(.opacity)
+            if shouldLoadVideo {
+                LoopingRemoteVideoPlayer(
+                    url: effect.fullPreviewUrl,
+                    isPlaying: shouldPlayVideo,
+                    onReadyForDisplayChanged: { isReady in
+                        guard isVideoReadyForDisplay != isReady else { return }
+                        DispatchQueue.main.async {
+                            guard isVideoReadyForDisplay != isReady else { return }
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                isVideoReadyForDisplay = isReady
+                            }
+                        }
+                    }
+                )
+                .transition(.opacity)
             }
+
+            VideoPosterFrameView(videoURL: effect.fullPreviewUrl)
+                .opacity(isVideoReadyForDisplay ? 0 : 1)
+                .allowsHitTesting(false)
         }
-        .animation(.easeInOut(duration: 0.35), value: showVideoPlayer)
+        .animation(.easeInOut(duration: 0.25), value: isVideoReadyForDisplay)
         .frame(width: cardWidth, height: cardHeight)
         .clipped()
     }
@@ -71,6 +86,8 @@ struct EffectShowcaseCard: View {
             cardWidth: 320,
             cardHeight: 480,
             isCentered: true,
+            shouldLoadVideo: true,
+            shouldPlayVideo: true,
             onSelect: {}
         )
     }

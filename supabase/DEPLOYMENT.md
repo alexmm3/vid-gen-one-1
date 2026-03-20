@@ -9,6 +9,15 @@ This directory contains everything needed to set up the Supabase backend for the
 - **`functions/`** — Edge functions (Grok-only, clean of hardcoded credentials)
 - **`config.toml`** — Local development configuration
 
+## Project MCP Mapping
+
+For this project, the Cursor MCP server to use is:
+
+- **`supabase-video-gen-app-1`**
+- Supabase project ref: **`oquhbidxsntfrqsloocc`**
+
+This is the project-level MCP to use for deployment and Supabase inspection tasks in this repo.
+
 ## Tables
 
 ### Core
@@ -78,6 +87,7 @@ Set these as Supabase Edge Function secrets:
 GROK_API_KEY=          # xAI Grok API key
 ADMIN=                 # Admin password for admin-auth
 ADMIN_DEVICE_ID=       # Device ID that bypasses subscription checks (optional)
+DEBUG_PREMIUM_DEVICE_PREFIX=debug-premium:   # Optional: DEBUG-build premium simulation bypass
 
 # R2 Storage (for admin-templates upload):
 R2_ACCOUNT_ID=
@@ -96,6 +106,12 @@ CLOUDFLARE_API_KEY=
 5. Set secrets: `supabase secrets set GROK_API_KEY=... ADMIN=...`
 6. Enable Realtime on the `generations` table (done in migration)
 7. Verify storage buckets are created (done in migration)
+
+## Notes
+
+- `admin-auth` and `admin-templates` use `SUPABASE_SERVICE_ROLE_KEY`, so the tightened RLS does not block the admin panel.
+- `devices` keeps anon `INSERT`/`SELECT` intentionally because the current iOS `UserVideoService` still registers and looks up device rows directly via PostgREST before saving `user_videos`.
+- `DEBUG_PREMIUM_DEVICE_PREFIX` should only be set in development or internal test environments. Release builds do not send this prefix, but if you enable it on a public production backend, any client that can forge that prefix could bypass subscription checks.
 
 ## Pipeline Architecture
 

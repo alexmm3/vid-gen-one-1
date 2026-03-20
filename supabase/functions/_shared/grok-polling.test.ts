@@ -9,7 +9,7 @@ Deno.test("fails immediately when Grok returns 404", () => {
     timeoutMinutes: 10,
   });
 
-  if (result !== "Grok generation request not found") {
+  if (result !== "This video request is no longer available. Please start a new one.") {
     throw new Error(`Unexpected result: ${result}`);
   }
 });
@@ -33,7 +33,7 @@ Deno.test("fails stale HTTP errors after timeout", () => {
     timeoutMinutes: 10,
   });
 
-  if (result !== "Grok polling failed with HTTP 500 after 12 minutes") {
+  if (result !== "We couldn’t retrieve your video (connection issue, error 500). Please try again.") {
     throw new Error(`Unexpected result: ${result}`);
   }
 });

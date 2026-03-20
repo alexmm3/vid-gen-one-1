@@ -45,9 +45,9 @@ struct CameraImagePicker: UIViewControllerRepresentable {
                 let fixedImage = image.fixedOrientation()
                 parent.image = fixedImage
                 
-                if parent.sourceType == .camera {
-                    UIImageWriteToSavedPhotosAlbum(fixedImage, nil, nil, nil)
-                }
+                // We previously saved the image to the gallery here, but it may cause
+                // permission prompts or memory issues that interrupt the generation flow.
+                // Removed UIImageWriteToSavedPhotosAlbum to ensure stable uploads.
             }
             parent.dismiss()
         }
@@ -157,8 +157,7 @@ enum ImagePickerHelper {
 
 // MARK: - Aspect Ratio Classification
 
-/// Maps an image's natural aspect ratio to the nearest standard ratio supported
-/// by both Gemini image editing and Grok video generation APIs.
+/// Maps an image's natural aspect ratio to the nearest standard ratio supported by video generation.
 enum AspectRatioCategory: String, CaseIterable {
     case portrait = "9:16"
     case mildPortrait = "3:4"

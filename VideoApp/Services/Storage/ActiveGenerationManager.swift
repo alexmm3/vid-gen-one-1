@@ -185,23 +185,16 @@ final class ActiveGenerationManager: ObservableObject {
     
     /// Start polling in the background (non-blocking)
     /// Call this after startGeneration() to poll without blocking the UI
-    /// Also subscribes to Supabase Realtime for near-instant status updates
     func startBackgroundPolling() {
         // Cancel any existing polling task
         pollingTask?.cancel()
         
-        guard let pending = pendingGeneration else {
+        guard pendingGeneration != nil else {
             print("⚠️ ActiveGenerationManager: No pending generation to poll")
             return
         }
         
-        print("🔄 ActiveGenerationManager: Starting background polling + Realtime subscription")
-        
-        // Subscribe to Realtime for near-instant updates (primary detection)
-        // Only if we have a real generation ID (not in upload phase)
-        if pending.status != "uploading" {
-            subscribeToGenerationUpdates(generationId: pending.generationId)
-        }
+        print("🔄 ActiveGenerationManager: Starting background polling")
         
         // Start slow fallback polling in a detached task (safety net)
         pollingTask = Task { [weak self] in
@@ -228,7 +221,7 @@ final class ActiveGenerationManager: ObservableObject {
         pollingTask?.cancel()
         pollingTask = nil
         unsubscribeFromRealtime()
-        print("✅ ActiveGenerationManager: Cancelled background polling + Realtime")
+        print("✅ ActiveGenerationManager: Cancelled background polling")
     }
     
     /// Check if background polling is active
@@ -379,7 +372,7 @@ final class ActiveGenerationManager: ObservableObject {
                 }
                 
             case .failed:
-                let error = job.errorMessage ?? "Unknown error"
+                let error = ClientSafeErrorMessage.sanitizeUserFacingNonEmpty(job.errorMessage)
                 failGeneration(error: error)
                 return .failed(error: error)
                 
@@ -453,39 +446,11 @@ final class ActiveGenerationManager: ObservableObject {
     
     // MARK: - Realtime Subscription
     
-    /// Subscribe to Supabase Realtime for near-instant generation status updates.
-    /// When the webhook (or cron) updates the generations table, the change is
-    /// pushed to this client within ~1 second via Postgres changes.
+    /// Realtime is intentionally disabled because generations are no longer
+    /// readable by the anon client after RLS hardening.
     func subscribeToGenerationUpdates(generationId: String) {
-        // Clean up any existing subscription first
         unsubscribeFromRealtime()
-        
-        print("📡 ActiveGenerationManager: Subscribing to Realtime for generation \(generationId)")
-        
-        let channel = SupabaseConfig.client.realtimeV2.channel("generation-\(generationId)")
-        
-        // Listen for UPDATE events on the generations table filtered to this generation
-        let token = channel.onPostgresChange(
-            UpdateAction.self,
-            schema: "public",
-            table: "generations",
-            filter: "id=eq.\(generationId)"
-        ) { [weak self] action in
-            Task { @MainActor [weak self] in
-                guard let self = self else { return }
-                self.handleRealtimeUpdate(action.record)
-            }
-        }
-        
-        // Store references to prevent deallocation
-        self.realtimeChannel = channel
-        self.realtimeObservationToken = token
-        
-        // Subscribe to the channel (async, fire-and-forget from MainActor)
-        Task {
-            await channel.subscribe()
-            print("📡 ActiveGenerationManager: Realtime channel subscribed")
-        }
+        print("📡 ActiveGenerationManager: Realtime disabled for generation \(generationId)")
     }
     
     /// Unsubscribe from Realtime updates and clean up resources
@@ -541,9 +506,9 @@ final class ActiveGenerationManager: ObservableObject {
             let errorMessage: String
             if let errorValue = record["error_message"],
                case .string(let msg) = errorValue {
-                errorMessage = msg
+                errorMessage = ClientSafeErrorMessage.sanitizeUserFacingNonEmpty(msg)
             } else {
-                errorMessage = "Unknown error"
+                errorMessage = ClientSafeErrorMessage.genericGeneration
             }
             print("📡 ActiveGenerationManager: Realtime detected failure - \(errorMessage)")
             failGeneration(error: errorMessage)
