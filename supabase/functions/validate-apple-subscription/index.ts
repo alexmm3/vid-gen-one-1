@@ -134,9 +134,12 @@ serve(async (req) => {
         );
       }
 
-      const startedAt = verifiedTransaction.payload.originalPurchaseDate
-        ? new Date(verifiedTransaction.payload.originalPurchaseDate).toISOString()
-        : new Date().toISOString();
+      // Compute period start from expires_at - period_days
+      // This ensures counter resets on each renewal
+      const periodDays = plan.period_days ?? 7;
+      const startedAt = new Date(
+        new Date(effectiveExpiresAt).getTime() - periodDays * 24 * 60 * 60 * 1000
+      ).toISOString();
 
       const { error: upsertError } = await supabase
         .from("device_subscriptions")
@@ -188,11 +191,12 @@ serve(async (req) => {
         `[validate-apple-subscription] Subscription stored successfully. Plan: ${plan.name}, Expires: ${effectiveExpiresAt}`,
       );
 
-      const { remaining: generationsRemaining } = await getGenerationUsage(
+      const { used: generationsUsed, remaining: generationsRemaining } = await getGenerationUsage(
         supabase,
         device.id,
         plan.generation_limit,
-        plan.period_days
+        plan.period_days,
+        effectiveExpiresAt
       );
 
       const isExpired = new Date(effectiveExpiresAt) < new Date();
@@ -220,6 +224,7 @@ serve(async (req) => {
               period_days: plan.period_days,
             },
             generations_remaining: generationsRemaining,
+            generations_used: generationsUsed,
           },
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -292,11 +297,12 @@ serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    const { remaining: generationsRemaining } = await getGenerationUsage(
+    const { used: generationsUsed, remaining: generationsRemaining } = await getGenerationUsage(
       supabase,
       device.id,
       plan.generation_limit,
-      plan.period_days
+      plan.period_days,
+      subscription.expires_at
     );
 
     console.log(`[validate-apple-subscription] Valid subscription. Plan: ${plan.name}, Remaining: ${generationsRemaining}`);
@@ -317,6 +323,7 @@ serve(async (req) => {
             period_days: plan.period_days,
           },
           generations_remaining: generationsRemaining,
+          generations_used: generationsUsed,
         },
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
