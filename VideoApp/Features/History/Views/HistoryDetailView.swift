@@ -75,7 +75,7 @@ struct HistoryDetailView: View {
     
     private var screenWidth: CGFloat { UIScreen.main.bounds.width }
     private var screenHeight: CGFloat { UIScreen.main.bounds.height }
-    private var hasPlayableVideo: Bool { generation.fullOutputUrl != nil }
+    private var hasPlayableVideo: Bool { generation.effectiveVideoUrl != nil }
     
     // MARK: - Body
     
@@ -179,6 +179,18 @@ struct HistoryDetailView: View {
         }
         .onAppear {
             viewModel.trackItemViewed(generation)
+            // Lazy-persist: if video has no local copy yet, persist it now
+            if generation.localVideoPath == nil, let remoteUrl = generation.outputVideoUrl {
+                VideoPersistenceManager.shared.persistFromRemote(
+                    remoteUrlString: remoteUrl,
+                    generationId: generation.id
+                ) { localPath in
+                    guard let localPath else { return }
+                    GenerationHistoryService.shared.updateLocalVideoPath(
+                        localPath, forGenerationId: generation.id
+                    )
+                }
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 controlsReady = true
                 showControls = true
@@ -195,7 +207,7 @@ struct HistoryDetailView: View {
     
     private var videoPlayerContent: some View {
         Group {
-            if let url = generation.fullOutputUrl {
+            if let url = generation.effectiveVideoUrl {
                 RemoteVideoPlayer(
                     url: url,
                     isPlaying: isPlaying,
@@ -455,7 +467,7 @@ struct HistoryDetailView: View {
     // MARK: - Actions
     
     private func saveToPhotos() {
-        guard generation.fullOutputUrl != nil, !isSaving else { return }
+        guard generation.effectiveVideoUrl != nil, !isSaving else { return }
         isSaving = true
         Analytics.track(.videoSaved)
         HapticManager.shared.lightImpact()
@@ -474,7 +486,7 @@ struct HistoryDetailView: View {
     }
     
     private func shareVideo() {
-        guard generation.fullOutputUrl != nil, !isSharing else { return }
+        guard generation.effectiveVideoUrl != nil, !isSharing else { return }
         isSharing = true
         Analytics.track(.videoShared)
         HapticManager.shared.lightImpact()

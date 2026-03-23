@@ -12,29 +12,41 @@ import Photos
 
 enum HistoryItemActionHandler {
     static func saveToPhotos(generation: LocalGeneration) async throws {
+        // Prefer local file
+        if let localUrl = generation.effectiveVideoUrl, localUrl.isFileURL {
+            let data = try Data(contentsOf: localUrl)
+            try await saveVideoToPhotoLibrary(data: data)
+            return
+        }
+        // Fall back to network download
         guard let urlString = generation.outputVideoUrl else {
             throw StorageServiceError.downloadFailed
         }
-        
         let data = try await StorageService.shared.downloadVideo(from: urlString)
         try await saveVideoToPhotoLibrary(data: data)
     }
     
     static func prepareShareFile(for generation: LocalGeneration) async throws -> URL {
-        guard let urlString = generation.outputVideoUrl else {
-            throw StorageServiceError.downloadFailed
-        }
-        
-        let data = try await StorageService.shared.downloadVideo(from: urlString)
         let fileName = sanitizedFileName(from: generation.displayName)
         let tempUrl = FileManager.default.temporaryDirectory
             .appendingPathComponent(fileName)
             .appendingPathExtension("mp4")
-        
+
         if FileManager.default.fileExists(atPath: tempUrl.path) {
             try? FileManager.default.removeItem(at: tempUrl)
         }
-        
+
+        // Prefer local file — just copy instead of downloading
+        if let localUrl = generation.effectiveVideoUrl, localUrl.isFileURL {
+            try FileManager.default.copyItem(at: localUrl, to: tempUrl)
+            return tempUrl
+        }
+
+        // Fall back to network download
+        guard let urlString = generation.outputVideoUrl else {
+            throw StorageServiceError.downloadFailed
+        }
+        let data = try await StorageService.shared.downloadVideo(from: urlString)
         try data.write(to: tempUrl)
         return tempUrl
     }

@@ -16,7 +16,7 @@ struct HistoryItemCard: View {
                 // Background
                 Color.videoSurface
                 
-                if let url = generation.fullOutputUrl {
+                if let url = generation.effectiveVideoUrl {
                     LoopingRemoteVideoPlayer(url: url)
                 } else {
                     // Placeholder for failed/pending

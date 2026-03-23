@@ -260,7 +260,19 @@ final class ActiveGenerationManager: ObservableObject {
             outputVideoUrl: outputUrl,
             isCustomTemplate: pending.templateId == nil
         )
-        
+
+        // Persist video locally so it never needs to be re-downloaded
+        if let savedGeneration = historyService.generations.first {
+            VideoPersistenceManager.shared.persistFromRemote(
+                remoteUrlString: outputUrl,
+                generationId: savedGeneration.id
+            ) { [weak historyService] localPath in
+                guard let localPath, let historyService else { return }
+                historyService.updateLocalVideoPath(localPath, forGenerationId: savedGeneration.id)
+                print("💾 Video persisted locally for generation \(savedGeneration.id)")
+            }
+        }
+
         // Store completed info for toast/UI
         lastCompletedGeneration = CompletedGenerationInfo(
             generationId: pending.generationId,

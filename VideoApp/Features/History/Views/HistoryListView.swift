@@ -12,11 +12,14 @@
 //
 
 import SwiftUI
+import StoreKit
 
 struct HistoryListView: View {
     @StateObject private var viewModel = HistoryViewModel()
     @ObservedObject private var activeGenerationManager = ActiveGenerationManager.shared
-    
+    @Environment(\.requestReview) private var requestReview
+    @AppStorage(AppConstants.StorageKeys.hasShownPostVideoReview) private var hasShownPostVideoReview = false
+
     @State private var selectedGeneration: LocalGeneration?
     @State private var pendingDeleteGeneration: LocalGeneration?
     @State private var isSavingGenerationID: String?
@@ -47,7 +50,9 @@ struct HistoryListView: View {
         .toolbarColorScheme(.dark, for: .navigationBar)
         // Keep fullScreenCover + zoom together.
         // Replacing this with an overlay / custom hero broke alignment and clipping.
-        .fullScreenCover(item: $selectedGeneration) { generation in
+        .fullScreenCover(item: $selectedGeneration, onDismiss: {
+            requestPostVideoReviewIfNeeded()
+        }) { generation in
             HistoryDetailView(generation: generation, namespace: heroNamespace)
                 .heroZoomTarget(sourceID: generation.id, in: heroNamespace)
         }
@@ -196,14 +201,14 @@ struct HistoryListView: View {
         } label: {
             Label("Save", systemImage: "square.and.arrow.down")
         }
-        .disabled(generation.fullOutputUrl == nil || isSavingGenerationID != nil)
-        
+        .disabled(generation.effectiveVideoUrl == nil || isSavingGenerationID != nil)
+
         Button {
             share(generation: generation)
         } label: {
             Label("Share", systemImage: "square.and.arrow.up")
         }
-        .disabled(generation.fullOutputUrl == nil || isSharingGenerationID != nil)
+        .disabled(generation.effectiveVideoUrl == nil || isSharingGenerationID != nil)
         
         Button(role: .destructive) {
             pendingDeleteGeneration = generation
@@ -213,7 +218,7 @@ struct HistoryListView: View {
     }
     
     private func save(generation: LocalGeneration) {
-        guard generation.fullOutputUrl != nil, isSavingGenerationID == nil else { return }
+        guard generation.effectiveVideoUrl != nil, isSavingGenerationID == nil else { return }
         isSavingGenerationID = generation.id
         Analytics.track(.videoSaved)
         HapticManager.shared.lightImpact()
@@ -237,7 +242,7 @@ struct HistoryListView: View {
     }
     
     private func share(generation: LocalGeneration) {
-        guard generation.fullOutputUrl != nil, isSharingGenerationID == nil else { return }
+        guard generation.effectiveVideoUrl != nil, isSharingGenerationID == nil else { return }
         isSharingGenerationID = generation.id
         Analytics.track(.videoShared)
         HapticManager.shared.lightImpact()
@@ -273,6 +278,15 @@ struct HistoryListView: View {
         }
     }
     
+    private func requestPostVideoReviewIfNeeded() {
+        guard !hasShownPostVideoReview else { return }
+        hasShownPostVideoReview = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s delay
+            requestReview()
+        }
+    }
+
     private var saveSuccessToast: some View {
         HStack(spacing: VideoSpacing.sm) {
             Image(systemName: "checkmark.circle.fill")

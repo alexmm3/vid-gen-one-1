@@ -42,30 +42,45 @@ final class GenerationHistoryService: ObservableObject {
             inputImageUrl: inputImageUrl,
             outputVideoUrl: outputVideoUrl,
             createdAt: Date(),
-            isCustomTemplate: isCustomTemplate
+            isCustomTemplate: isCustomTemplate,
+            localVideoPath: nil
         )
         
         // Add to beginning of list
         generations.insert(generation, at: 0)
         
-        // Trim if exceeds max
+        // Trim if exceeds max, cleaning up local files for evicted entries
         if generations.count > maxHistoryItems {
+            let evicted = Array(generations.suffix(from: maxHistoryItems))
+            for gen in evicted {
+                VideoPersistenceManager.shared.delete(generationId: gen.id)
+            }
             generations = Array(generations.prefix(maxHistoryItems))
         }
-        
+
         persistHistory()
-        
+
         print("✅ GenerationHistoryService: Saved generation \(generation.id)")
     }
     
     /// Delete a generation from history
     func deleteGeneration(_ id: String) {
+        // Delete local video file if it exists
+        VideoPersistenceManager.shared.delete(generationId: id)
+
         generations.removeAll { $0.id == id }
         persistHistory()
-        
+
         print("✅ GenerationHistoryService: Deleted generation \(id)")
     }
-    
+
+    /// Update the local video file path for a generation
+    func updateLocalVideoPath(_ path: String, forGenerationId id: String) {
+        guard let index = generations.firstIndex(where: { $0.id == id }) else { return }
+        generations[index].localVideoPath = path
+        persistHistory()
+    }
+
     /// Get a generation by ID
     func generation(withId id: String) -> LocalGeneration? {
         generations.first { $0.id == id }
@@ -100,7 +115,8 @@ final class GenerationHistoryService: ObservableObject {
                 inputImageUrl: remote.inputImageUrl ?? "",
                 outputVideoUrl: outputUrl,
                 createdAt: parseISO8601(remote.createdAt) ?? Date(),
-                isCustomTemplate: remote.effectId == nil && remote.referenceVideoUrl == nil
+                isCustomTemplate: remote.effectId == nil && remote.referenceVideoUrl == nil,
+                localVideoPath: nil
             )
             newEntries.append(local)
         }
@@ -113,20 +129,28 @@ final class GenerationHistoryService: ObservableObject {
         generations.append(contentsOf: newEntries)
         generations.sort { $0.createdAt > $1.createdAt }
         
-        // Trim if exceeds max
+        // Trim if exceeds max, cleaning up local files for evicted entries
         if generations.count > maxHistoryItems {
+            let evicted = Array(generations.suffix(from: maxHistoryItems))
+            for gen in evicted {
+                VideoPersistenceManager.shared.delete(generationId: gen.id)
+            }
             generations = Array(generations.prefix(maxHistoryItems))
         }
-        
+
         persistHistory()
         print("✅ GenerationHistoryService: Merged \(newEntries.count) remote generations (total: \(generations.count))")
     }
     
     /// Clear all history
     func clearHistory() {
+        // Delete all local video files
+        for generation in generations {
+            VideoPersistenceManager.shared.delete(generationId: generation.id)
+        }
         generations.removeAll()
         persistHistory()
-        
+
         print("✅ GenerationHistoryService: Cleared all history")
     }
     

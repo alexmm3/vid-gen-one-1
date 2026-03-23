@@ -54,7 +54,8 @@ struct LocalGeneration: Identifiable, Codable, Equatable, Hashable {
     let outputVideoUrl: String?
     let createdAt: Date
     let isCustomTemplate: Bool
-    
+    var localVideoPath: String?
+
     /// Display name for history list
     var displayName: String {
         isCustomTemplate ? "Custom Video" : templateName
@@ -70,6 +71,17 @@ struct LocalGeneration: Identifiable, Codable, Equatable, Hashable {
         guard let urlString = outputVideoUrl else { return nil }
         return URL(string: urlString)
     }
+
+    /// URL to use for playback — prefers local file, falls back to remote
+    var effectiveVideoUrl: URL? {
+        if localVideoPath != nil {
+            let localURL = VideoPersistenceManager.shared.localURL(for: id)
+            if FileManager.default.fileExists(atPath: localURL.path) {
+                return localURL
+            }
+        }
+        return fullOutputUrl
+    }
 }
 
 // MARK: - Sample Data
@@ -82,7 +94,8 @@ extension LocalGeneration {
         inputImageUrl: "https://example.com/input.jpg",
         outputVideoUrl: "https://example.com/output.mp4",
         createdAt: Date(),
-        isCustomTemplate: false
+        isCustomTemplate: false,
+        localVideoPath: nil
     )
     
     static let samples: [LocalGeneration] = [
@@ -93,7 +106,8 @@ extension LocalGeneration {
             inputImageUrl: "https://example.com/input1.jpg",
             outputVideoUrl: "https://example.com/output1.mp4",
             createdAt: Date().addingTimeInterval(-3600),
-            isCustomTemplate: false
+            isCustomTemplate: false,
+            localVideoPath: nil
         ),
         LocalGeneration(
             id: UUID().uuidString,
@@ -102,7 +116,8 @@ extension LocalGeneration {
             inputImageUrl: "https://example.com/input2.jpg",
             outputVideoUrl: "https://example.com/output2.mp4",
             createdAt: Date().addingTimeInterval(-86400),
-            isCustomTemplate: false
+            isCustomTemplate: false,
+            localVideoPath: nil
         ),
         LocalGeneration(
             id: UUID().uuidString,
@@ -111,7 +126,8 @@ extension LocalGeneration {
             inputImageUrl: "https://example.com/input3.jpg",
             outputVideoUrl: "https://example.com/output3.mp4",
             createdAt: Date().addingTimeInterval(-172800),
-            isCustomTemplate: true
+            isCustomTemplate: true,
+            localVideoPath: nil
         )
     ]
 }
