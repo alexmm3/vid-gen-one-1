@@ -6,9 +6,11 @@
 //
 
 import SwiftUI
+import StoreKit
 
 struct ProfileView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.requestReview) private var requestReview
     @State private var showPaywall = false
     
     // Warm accent — a muted sand/gold tone that feels premium without being flashy
@@ -172,7 +174,7 @@ struct ProfileView: View {
         VStack(spacing: 0) {
             linkRow(title: "Rate the App", icon: "star") {
                 Analytics.track(.rateAppTapped)
-                openURL(ExternalURLs.appStoreReview)
+                requestReview()
             }
             
             linkDivider

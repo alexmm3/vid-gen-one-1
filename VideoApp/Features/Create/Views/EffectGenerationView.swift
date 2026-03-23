@@ -106,8 +106,8 @@ struct EffectGenerationView: View {
         }
         .toolbarColorScheme(.dark, for: .navigationBar)
         .sheet(isPresented: $showPhotoTips) {
-            PhotoTipsSheet()
-                .presentationDetents([.height(600)])
+            PhotoTipsSheet(effectDescription: effect.description)
+                .presentationDetents([.height(680)])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showPhotoSourceSheet) {

@@ -98,19 +98,27 @@ final class SubscriptionManager: ObservableObject {
     /// Load products from App Store Connect
     func loadContent() async {
         isLoading = true
-        
+
         do {
+            print("🔄 SubscriptionManager: Loading products for IDs: \(Constant.productIds)")
             let storeProducts = try await Product.products(for: Constant.productIds)
                 .sorted(by: { $0.price > $1.price })
             self.products = storeProducts
             delegate?.contentWasLoaded(with: storeProducts)
-            
-            print("✅ SubscriptionManager: Loaded \(storeProducts.count) products")
+
+            if storeProducts.isEmpty {
+                print("⚠️ SubscriptionManager: Product.products() returned EMPTY array for IDs: \(Constant.productIds)")
+            } else {
+                for product in storeProducts {
+                    print("✅ SubscriptionManager: Loaded \(product.id) — \(product.displayPrice) (\(product.displayName))")
+                }
+            }
         } catch {
             delegate?.errorOccurred(error: error)
-            print("❌ SubscriptionManager: Failed to load products - \(error)")
+            print("❌ SubscriptionManager: Failed to load products - \(error.localizedDescription)")
+            print("❌ SubscriptionManager: Error details - \(error)")
         }
-        
+
         isLoading = false
     }
     
@@ -274,6 +282,11 @@ final class SubscriptionManager: ObservableObject {
         }
     }
     
+    /// Update products from external source (e.g., PaywallViewModel direct load)
+    func updateProducts(_ newProducts: [Product]) {
+        self.products = newProducts
+    }
+
     /// Get product by plan type
     func product(for plan: SubscriptionPlan) -> Product? {
         products.first { $0.id == plan.productId }

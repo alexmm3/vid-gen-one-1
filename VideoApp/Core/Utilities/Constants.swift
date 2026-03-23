@@ -53,6 +53,7 @@ enum AppConstants {
         static let isPremiumUser = "isPremiumUser"
         static let generationHistory = "generationHistory"
         static let deviceId = "deviceId"
+        static let hasShownPostVideoReview = "hasShownPostVideoReview"
     }
     
     // MARK: - Animation Durations

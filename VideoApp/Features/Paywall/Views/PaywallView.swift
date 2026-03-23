@@ -11,22 +11,22 @@ import StoreKit
 struct PaywallView: View {
     let source: AnalyticsEvent.PaywallSource
     var onComplete: (() -> Void)?
-    
+
     @StateObject private var viewModel = PaywallViewModel()
     @Environment(\.dismiss) private var dismiss
-    
+
     var body: some View {
         GeometryReader { geometry in
             let sectionSpacing = Self.dynamicSectionSpacing(for: geometry.size.height)
-            
+
             ZStack {
                 // Video background with overlay - fill entire screen
                 Color.black
                     .ignoresSafeArea()
-                
+
                 LoopingVideoPlayer(videoName: "paywall_bg")
                     .ignoresSafeArea(.all)
-                
+
                 // Gradient black overlay (50% at top to 100% at bottom)
                 LinearGradient(
                     colors: [
@@ -37,19 +37,19 @@ struct PaywallView: View {
                     endPoint: .bottom
                 )
                 .ignoresSafeArea()
-                
+
                 VStack(spacing: 0) {
                     ScrollView(showsIndicators: false) {
                         VStack(spacing: sectionSpacing) {
                             // Header
                             headerSection
-                            
+
                             // Benefits
                             benefitsSection
-                            
+
                             // Pricing cards
                             pricingSection
-                            
+
                             // Subscribe button + legal (same section spacing as above)
                             subscribeSection
                         }
@@ -57,7 +57,7 @@ struct PaywallView: View {
                         .padding(.top, sectionSpacing)
                         .padding(.bottom, sectionSpacing)
                     }
-                    
+
                     // "Maybe later" dismiss button
                     maybeLaterButton
                         .padding(.bottom, VideoSpacing.md)
@@ -80,9 +80,9 @@ struct PaywallView: View {
             Text(viewModel.error ?? "Unknown error")
         }
     }
-    
+
     // MARK: - Dynamic Spacing
-    
+
     /// Computes section spacing proportional to available screen height.
     /// On regular devices (iPhone 14/15/16), spacing stays at the default 24pt.
     /// On smaller screens (iPhone SE), spacing compresses to ~17-18pt,
@@ -90,9 +90,9 @@ struct PaywallView: View {
     private static func dynamicSectionSpacing(for availableHeight: CGFloat) -> CGFloat {
         max(VideoSpacing.sm, min(VideoSpacing.xl, availableHeight * 0.028))
     }
-    
+
     // MARK: - Maybe Later Button
-    
+
     private var maybeLaterButton: some View {
         Button {
             Analytics.track(.paywallDismissed(source: source))
@@ -105,89 +105,89 @@ struct PaywallView: View {
         }
         .frame(maxWidth: .infinity, alignment: .center)
     }
-    
+
     // MARK: - Subscribe Section
-    
+
     private var subscribeSection: some View {
         VStack(spacing: VideoSpacing.sm) {
             subscribeButton
             legalFooter
         }
     }
-    
+
     // MARK: - Header Section
-    
+
     private var headerSection: some View {
         VStack(spacing: VideoSpacing.xs) {
             ZStack {
                 Circle()
                     .fill(Color.videoWhite)
                     .frame(width: 50, height: 50)
-                
+
                 Image(systemName: "crown.fill")
                     .font(.system(size: 22))
                     .foregroundColor(.videoBlack)
             }
-            
-            Text("Go Premium")
+
+            Text("Unlock All Effects")
                 .font(.videoDisplayLarge)
                 .foregroundColor(.white)
                 .multilineTextAlignment(.center)
-            
-            Text("Create stunning videos with AI")
+
+            Text("Effects you won't find anywhere else")
                 .font(.videoBody)
                 .foregroundColor(.white.opacity(0.8))
                 .multilineTextAlignment(.center)
         }
     }
-    
+
     // MARK: - Benefits Section
-    
+
     private var benefitsSection: some View {
         VStack(alignment: .leading, spacing: VideoSpacing.md) {
             benefitRow(
                 icon: "video.badge.plus",
                 title: viewModel.planInfo(for: .monthly)
-                    .map { "Up to \($0.generationLimit) Generations" } ?? "Up to 50 Generations",
-                subtitle: "Available with the monthly plan"
+                    .map { "Up to \($0.generationLimit) Generations" } ?? "More Generations",
+                subtitle: "Create up to 50 videos per month"
             )
-            benefitRow(icon: "bolt.fill", title: "Priority Processing", subtitle: "Faster generation times")
-            benefitRow(icon: "flame.fill", title: "Trending Effects", subtitle: "Access exclusive AI effects")
-            benefitRow(icon: "sparkles", title: "HD Quality", subtitle: "High quality video output")
+            benefitRow(icon: "bolt.fill", title: "Skip the Line", subtitle: "Your videos render first")
+            benefitRow(icon: "flame.fill", title: "Exclusive Effects", subtitle: "New drops every week")
+            benefitRow(icon: "sparkles", title: "Full HD Export", subtitle: "Crisp, share-ready quality")
         }
         .padding(VideoSpacing.md)
         .background(Color.black.opacity(0.85))
         .cornerRadius(VideoSpacing.radiusLarge)
     }
-    
+
     private func benefitRow(icon: String, title: String, subtitle: String) -> some View {
         HStack(spacing: VideoSpacing.md) {
             ZStack {
                 Circle()
                     .fill(Color.videoMarketing.opacity(0.2))
                     .frame(width: 36, height: 36)
-                
+
                 Image(systemName: icon)
                     .font(.system(size: 16))
                     .foregroundColor(.videoMarketing)
             }
-            
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.videoSubheadline)
                     .foregroundColor(.white)
-                
+
                 Text(subtitle)
                     .font(.videoCaption)
                     .foregroundColor(.white.opacity(0.7))
             }
-            
+
             Spacer()
         }
     }
-    
+
     // MARK: - Pricing Section
-    
+
     private var pricingSection: some View {
         VStack(spacing: VideoSpacing.sm) {
             ForEach(SubscriptionPlan.allCases, id: \.self) { plan in
@@ -195,13 +195,13 @@ struct PaywallView: View {
             }
         }
     }
-    
+
     private func pricingCard(for plan: SubscriptionPlan) -> some View {
         let isSelected = viewModel.selectedPlan == plan
         let product = plan == .weekly ? viewModel.weeklyProduct : viewModel.monthlyProduct
         let planInfo = viewModel.planInfo(for: plan)
         let limitDescription = planInfo?.limitDescription ?? plan.defaultLimitDescription
-        
+
         return Button {
             viewModel.selectPlan(plan)
         } label: {
@@ -210,27 +210,37 @@ struct PaywallView: View {
                     Text(plan.displayName)
                         .font(.videoHeadline)
                         .foregroundColor(.white)
-                    
+
                     // Show limit description (e.g., "10 videos per week")
                     Text(limitDescription)
                         .font(.videoCaption)
                         .foregroundColor(.videoMarketing)
-                    
-                    if let product = product {
-                        Text(product.displayPrice + (plan == .monthly ? "/month" : "/week"))
-                            .font(.videoCaption)
-                            .foregroundColor(.white.opacity(0.7))
-                    }
                 }
-                
+
                 Spacer()
-                
+
+                // Price from StoreKit, spinner while loading
+                if let product = product {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        Text(product.displayPrice)
+                            .font(.videoHeadline)
+                            .foregroundColor(.white)
+                        Text(plan == .monthly ? "per month" : "per week")
+                            .font(.videoCaptionSmall)
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                } else {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white.opacity(0.5)))
+                        .scaleEffect(0.8)
+                }
+
                 // Selection indicator
                 ZStack {
                     Circle()
                         .stroke(isSelected ? Color.videoMarketing : Color.white.opacity(0.5), lineWidth: 2)
                         .frame(width: 24, height: 24)
-                    
+
                     if isSelected {
                         Circle()
                             .fill(Color.videoMarketing)
@@ -253,7 +263,7 @@ struct PaywallView: View {
             .overlay(alignment: .topTrailing) {
                 // Best Value badge on upper right edge
                 if plan == .monthly {
-                    Text("Best Value")
+                    Text("Save 20%")
                         .font(.videoCaptionSmall)
                         .fontWeight(.semibold)
                         .foregroundColor(.videoBlack)
@@ -268,9 +278,9 @@ struct PaywallView: View {
         }
         .buttonStyle(ScaleButtonStyle())
     }
-    
+
     // MARK: - Subscribe Button
-    
+
     private var subscribeButton: some View {
         VideoButton(
             title: buttonTitle,
@@ -280,23 +290,28 @@ struct PaywallView: View {
             isLoading: viewModel.isPurchasing,
             style: .marketing
         )
+        .opacity(viewModel.selectedProduct == nil ? 0.5 : 1)
+        .disabled(viewModel.selectedProduct == nil)
     }
-    
+
     private var buttonTitle: String {
         if let product = viewModel.selectedProduct {
-            return "Subscribe - \(product.displayPrice)"
+            return "Start Creating — \(product.displayPrice)"
         }
-        return "Subscribe"
+        if viewModel.isLoading {
+            return "Loading..."
+        }
+        return "Start Creating"
     }
-    
+
     // MARK: - Legal Footer
-    
+
     private var legalFooter: some View {
         VStack(spacing: VideoSpacing.xs) {
             Text("Subscription auto-renews. Cancel anytime.")
                 .font(.videoCaptionSmall)
                 .foregroundColor(.white.opacity(0.6))
-            
+
             HStack(spacing: VideoSpacing.md) {
                 Link("Terms", destination: ExternalURLs.termsOfUse)
                 Text("•")

@@ -17,21 +17,21 @@ struct OnboardingPage: Identifiable {
     static let pages: [OnboardingPage] = [
         OnboardingPage(
             id: 0,
-            title: "Bring Photos\nTo Life",
+            title: "Effects No One\nHas Seen",
             subtitle: "",
             videoName: "onboarding_1",
             icon: ""
         ),
         OnboardingPage(
             id: 1,
-            title: "Choose Your\nEffect",
+            title: "One Tap.\nMind-Blown.",
             subtitle: "",
             videoName: "onboarding_2",
             icon: ""
         ),
         OnboardingPage(
             id: 2,
-            title: "Share\nEverywhere",
+            title: "Make Them\nAsk How",
             subtitle: "",
             videoName: "onboarding_3",
             icon: ""

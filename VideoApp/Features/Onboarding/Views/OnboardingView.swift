@@ -56,7 +56,7 @@ struct OnboardingView: View {
     }
     
     private var buttonTitle: String {
-        currentPage == pages.count - 1 ? "Get Started" : "Continue"
+        currentPage == pages.count - 1 ? "Let's Go" : "Continue"
     }
     
     private func nextPage() {

@@ -523,42 +523,52 @@ struct FullScreenVideoView: View {
 // MARK: - Photo Tips Sheet
 
 struct PhotoTipsSheet: View {
+    var effectDescription: String? = nil
     @Environment(\.dismiss) private var dismiss
-    
+
     var body: some View {
         NavigationView {
             ZStack {
                 Color.videoBackground.ignoresSafeArea()
-                
+
                 VStack(spacing: VideoSpacing.lg) {
                     // Header icon
                     ZStack {
                         Circle()
                             .fill(Color.videoAccent.opacity(0.15))
                             .frame(width: 80, height: 80)
-                        
+
                         Image(systemName: "person.fill.viewfinder")
                             .font(.system(size: 36))
                             .foregroundColor(.videoAccent)
                     }
                     .padding(.top, VideoSpacing.md)
-                    
-                    Text("Photo Tips")
+
+                    Text("Tips for Best Results")
                         .font(.videoDisplayMedium)
                         .foregroundColor(.videoTextPrimary)
-                    
+
+                    // Effect description (dynamic from backend)
+                    if let description = effectDescription, !description.isEmpty {
+                        Text(description)
+                            .font(.videoBody)
+                            .foregroundColor(.videoTextSecondary)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, VideoSpacing.lg)
+                    }
+
                     // Tips list
                     VStack(alignment: .leading, spacing: VideoSpacing.md) {
-                        tipRow(icon: "figure.stand", text: "Full-body photos work best")
-                        tipRow(icon: "face.smiling", text: "Face the camera directly")
-                        tipRow(icon: "sun.max", text: "Use good lighting")
-                        tipRow(icon: "camera.metering.none", text: "Avoid blurry or dark photos")
-                        tipRow(icon: "rectangle.portrait", text: "Solid backgrounds recommended")
+                        tipRow(icon: "person.crop.rectangle", text: "Portraits work best")
+                        tipRow(icon: "sun.max.fill", text: "Good lighting, better magic")
+                        tipRow(icon: "photo.artframe", text: "Clear face = stunning result")
+                        tipRow(icon: "arrow.up.left.and.arrow.down.right", text: "Use high-res photos")
                     }
                     .padding(.horizontal, VideoSpacing.lg)
-                    
+
                     Spacer()
-                    
+
                     Button {
                         dismiss()
                     } label: {
@@ -589,18 +599,18 @@ struct PhotoTipsSheet: View {
             }
         }
     }
-    
+
     private func tipRow(icon: String, text: String) -> some View {
         HStack(spacing: VideoSpacing.md) {
             Image(systemName: icon)
                 .font(.system(size: 20))
                 .foregroundColor(.videoAccent)
                 .frame(width: 28)
-            
+
             Text(text)
                 .font(.videoBody)
                 .foregroundColor(.videoTextPrimary)
-            
+
             Spacer()
         }
         .padding(.vertical, VideoSpacing.xs)
