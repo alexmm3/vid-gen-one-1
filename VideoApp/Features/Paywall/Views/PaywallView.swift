@@ -119,15 +119,10 @@ struct PaywallView: View {
 
     private var headerSection: some View {
         VStack(spacing: VideoSpacing.xs) {
-            ZStack {
-                Circle()
-                    .fill(Color.videoWhite)
-                    .frame(width: 50, height: 50)
-
-                Image(systemName: "crown.fill")
-                    .font(.system(size: 22))
-                    .foregroundColor(.videoBlack)
-            }
+            Image("PaywallIcon")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 64, height: 64)
 
             Text("Unlock All Effects")
                 .font(.videoDisplayLarge)
