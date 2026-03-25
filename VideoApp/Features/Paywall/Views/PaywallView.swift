@@ -219,20 +219,16 @@ struct PaywallView: View {
 
                 Spacer()
 
-                // Price from StoreKit, spinner while loading
-                if let product = product {
-                    VStack(alignment: .trailing, spacing: 2) {
+                // Price from StoreKit
+                VStack(alignment: .trailing, spacing: 2) {
+                    if let product = product {
                         Text(product.displayPrice)
                             .font(.videoHeadline)
                             .foregroundColor(.white)
-                        Text(plan == .monthly ? "per month" : "per week")
-                            .font(.videoCaptionSmall)
-                            .foregroundColor(.white.opacity(0.6))
                     }
-                } else {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white.opacity(0.5)))
-                        .scaleEffect(0.8)
+                    Text(plan == .monthly ? "per month" : "per week")
+                        .font(.videoCaptionSmall)
+                        .foregroundColor(.white.opacity(0.6))
                 }
 
                 // Selection indicator
@@ -283,25 +279,13 @@ struct PaywallView: View {
 
     private var subscribeButton: some View {
         VideoButton(
-            title: buttonTitle,
+            title: "Subscribe",
             action: {
                 Task { await viewModel.purchase() }
             },
-            isLoading: viewModel.isPurchasing,
+            isLoading: viewModel.isPurchasing || viewModel.isLoading,
             style: .marketing
         )
-        .opacity(viewModel.selectedProduct == nil ? 0.5 : 1)
-        .disabled(viewModel.selectedProduct == nil)
-    }
-
-    private var buttonTitle: String {
-        if let product = viewModel.selectedProduct {
-            return "Start Creating — \(product.displayPrice)"
-        }
-        if viewModel.isLoading {
-            return "Loading..."
-        }
-        return "Start Creating"
     }
 
     // MARK: - Legal Footer

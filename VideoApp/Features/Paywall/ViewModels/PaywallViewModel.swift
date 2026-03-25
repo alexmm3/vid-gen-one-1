@@ -5,6 +5,7 @@
 //  ViewModel for the paywall view
 //
 
+import Combine
 import Foundation
 import StoreKit
 
@@ -23,9 +24,16 @@ final class PaywallViewModel: ObservableObject {
     // MARK: - Private
     private let subscriptionManager = SubscriptionManager.shared
     private let planService = SubscriptionPlanService.shared
-    private static let maxRetries = 3
+    private var cancellable: AnyCancellable?
 
-    // MARK: - Computed Properties
+    init() {
+        // Sync products from SubscriptionManager (may already be loaded at app launch)
+        products = subscriptionManager.products
+        cancellable = subscriptionManager.$products
+            .dropFirst() // skip initial value (already assigned above)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.products = $0 }
+    }
 
     var weeklyProduct: Product? {
         products.first { $0.id == SubscriptionPlan.weekly.productId }
@@ -51,43 +59,19 @@ final class PaywallViewModel: ObservableObject {
 
     // MARK: - Public Methods
 
-    /// Load products directly from StoreKit and plan info from backend
+    /// Load plan info from backend; reload StoreKit products only if not yet available
     func loadProducts() async {
         isLoading = true
 
-        let productIds = BrandConfig.allProductIds
-        print("🔄 PaywallViewModel: Loading products for IDs: \(productIds)")
-
-        // Load backend plans in parallel (optional, don't block on it)
+        // Fetch backend plan info in parallel
         async let backendPlans: () = planService.fetchPlans()
 
-        // Load StoreKit products with silent retry
-        for attempt in 1...Self.maxRetries {
-            do {
-                let storeProducts = try await Product.products(for: productIds)
-
-                if !storeProducts.isEmpty {
-                    self.products = storeProducts.sorted(by: { $0.price > $1.price })
-                    // Also update the shared manager so purchases work
-                    subscriptionManager.updateProducts(self.products)
-                    print("✅ PaywallViewModel: Loaded \(storeProducts.count) products")
-                    for p in storeProducts {
-                        print("  → \(p.id): \(p.displayPrice)")
-                    }
-                    break
-                } else {
-                    print("⚠️ PaywallViewModel: Attempt \(attempt)/\(Self.maxRetries) — empty products")
-                }
-            } catch {
-                print("❌ PaywallViewModel: Attempt \(attempt)/\(Self.maxRetries) — \(error)")
-            }
-
-            if attempt < Self.maxRetries {
-                try? await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000)
-            }
+        // If SubscriptionManager hasn't loaded products yet (e.g. slow network at launch),
+        // trigger a load now as fallback
+        if products.isEmpty {
+            await subscriptionManager.loadContent()
         }
 
-        // Wait for backend plans
         _ = await backendPlans
         planInfos = planService.plans
 
@@ -96,8 +80,13 @@ final class PaywallViewModel: ObservableObject {
 
     /// Purchase selected plan
     func purchase() async {
+        // If products still haven't loaded, try once more
+        if products.isEmpty {
+            await subscriptionManager.loadContent()
+        }
+
         guard let product = selectedProduct else {
-            error = "Unable to load product"
+            error = "Unable to load subscription. Please check your internet connection and try again."
             showError = true
             return
         }

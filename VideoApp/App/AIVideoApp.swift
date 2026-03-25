@@ -94,9 +94,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Set up analytics
         configureAnalytics()
         
-        // Start subscription transaction listener (refresh happens in RootView.initialize)
+        // Start subscription transaction listener and pre-load StoreKit products
         Task {
             await SubscriptionManager.shared.startTransactionUpdatesListener()
+            await SubscriptionManager.shared.loadContent()
         }
         
         // Check for pending generations on app launch
