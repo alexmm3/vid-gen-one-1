@@ -20,18 +20,22 @@ struct PaywallView: View {
             let sectionSpacing = Self.dynamicSectionSpacing(for: geometry.size.height)
 
             ZStack {
-                // Video background with overlay - fill entire screen
+                // Background image — fill entire screen, never compress
                 Color.black
                     .ignoresSafeArea()
 
-                LoopingVideoPlayer(videoName: "paywall_bg")
-                    .ignoresSafeArea(.all)
+                Image("PaywallBackground")
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                    .clipped()
+                    .ignoresSafeArea()
 
-                // Gradient black overlay (50% at top to 100% at bottom)
+                // Gradient overlay for text readability
                 LinearGradient(
                     colors: [
-                        Color.black.opacity(0.5),
-                        Color.black.opacity(1.0)
+                        Color.black.opacity(0.3),
+                        Color.black.opacity(0.85)
                     ],
                     startPoint: .top,
                     endPoint: .bottom

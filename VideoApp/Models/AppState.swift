@@ -26,9 +26,11 @@ final class AppState: ObservableObject {
     @AppStorage(AppConstants.StorageKeys.hasReachedPaywall)
     var hasReachedPaywall: Bool = false
     
-    /// Whether user has accepted AI data processing consent
+    /// Whether user has accepted AI data processing consent.
+    /// Defaulting to true — consent screen disabled for now.
+    /// Set back to false to re-enable AIDataConsentView before first generation.
     @AppStorage(AppConstants.StorageKeys.hasAcceptedAIDataConsent)
-    var hasAcceptedAIDataConsent: Bool = false
+    var hasAcceptedAIDataConsent: Bool = true
     
     /// Whether the onboarding paywall should be presented (non-persisted, session only)
     @Published var showOnboardingPaywall: Bool = false
@@ -102,18 +104,28 @@ final class AppState: ObservableObject {
     
     // MARK: - Premium Management
     
-    /// Update premium status
+    /// Update premium status.
+    /// When called with only `isPremium` (e.g. from paywall callbacks), preserves existing generation data.
+    /// Pass explicit values to update generation quota (e.g. after backend validation).
     func setPremiumStatus(_ isPremium: Bool, generationsRemaining: Int? = nil, generationsUsed: Int? = nil, generationLimit: Int? = nil, expiresAt: String? = nil) {
         self._isPremiumUser = isPremium
-        self.generationsRemaining = generationsRemaining
-        self.generationsUsed = generationsUsed
-        self.generationLimit = generationLimit
+
+        // Only update generation data when explicitly provided — avoid wiping
+        // quota info when called from paywall callbacks with just `true`
+        if generationsRemaining != nil || generationsUsed != nil || generationLimit != nil {
+            self.generationsRemaining = generationsRemaining
+            self.generationsUsed = generationsUsed
+            self.generationLimit = generationLimit
+        }
 
         if isPremium, let expiresAt = expiresAt {
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
             self.subscriptionExpiresAt = formatter.date(from: expiresAt) ?? ISO8601DateFormatter().date(from: expiresAt)
         } else if !isPremium {
+            self.generationsRemaining = nil
+            self.generationsUsed = nil
+            self.generationLimit = nil
             self.subscriptionExpiresAt = nil
         }
     }

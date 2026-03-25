@@ -233,15 +233,10 @@ struct RootView: View {
     }
     
     private var splashView: some View {
-        VStack(spacing: VideoSpacing.lg) {
-            Image(systemName: "wand.and.sparkles")
-                .font(.system(size: 60))
-                .foregroundColor(.white)
-            
-            Text(BrandConfig.appName)
-                .font(.videoDisplayLarge)
-                .foregroundColor(.videoTextPrimary)
-        }
+        Image("LaunchImage")
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .ignoresSafeArea()
     }
     
     private func initialize() async {
