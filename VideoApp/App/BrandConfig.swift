@@ -40,7 +40,7 @@ enum BrandConfig {
     // When empty, ExternalURLs uses placeholders (Apple EULA for legal, support@example.com for email)
     // so the app does not crash. Replace before App Store submission.
 
-    static let supportEmail = ""
+    static let supportEmail = "support@orangesoft.co"
     static let privacyPolicyUrl = ""
     static let termsOfUseUrl = "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/"
 
