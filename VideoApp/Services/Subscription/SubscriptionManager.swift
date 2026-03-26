@@ -339,6 +339,35 @@ final class SubscriptionManager: ObservableObject {
             }
         } catch {
             print("⚠️ SubscriptionManager: Backend validation failed - \(error)")
+
+            // If Mode A (with signed transaction) failed, retry as Mode B (check-only)
+            // to pick up any existing subscription record from device_subscriptions
+            if signedTransactionInfo != nil {
+                print("🔄 SubscriptionManager: Retrying without signed transaction (Mode B check-only)")
+                do {
+                    let fallbackResult = try await SubscriptionValidationService.shared.validateSubscription(
+                        originalTransactionId: originalTransactionId,
+                        signedTransactionInfo: nil,
+                        useSandbox: useSandboxForValidation
+                    )
+                    if fallbackResult.isValid {
+                        if let productId = fallbackResult.productId {
+                            currentProductId = productId
+                        }
+                        AppState.shared.setPremiumStatus(
+                            true,
+                            generationsRemaining: fallbackResult.generationsRemaining,
+                            generationsUsed: fallbackResult.generationsUsed,
+                            generationLimit: fallbackResult.generationLimit,
+                            expiresAt: fallbackResult.expiresAt
+                        )
+                        return
+                    }
+                } catch {
+                    print("⚠️ SubscriptionManager: Mode B fallback also failed - \(error)")
+                }
+            }
+
             if clearStateOnInvalidResponse,
                let validationError = error as? ValidationError,
                validationError == .invalidResponse {
