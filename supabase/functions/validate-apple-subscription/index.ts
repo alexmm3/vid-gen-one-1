@@ -68,8 +68,8 @@ serve(async (req) => {
     }
 
     // ── MODE A: Register / update subscription using Apple's signed transaction ──
+    let verifiedTransaction;
     if (signed_transaction_info) {
-      let verifiedTransaction;
       try {
         verifiedTransaction = await verifySignedTransactionInfo(
           signed_transaction_info,
@@ -77,18 +77,12 @@ serve(async (req) => {
         );
       } catch (verificationError) {
         console.error("[validate-apple-subscription] Signed transaction verification failed:", verificationError);
-        return new Response(
-          JSON.stringify({
-            valid: false,
-            error: verificationError instanceof Error
-              ? verificationError.message
-              : "Apple signed transaction could not be verified.",
-            error_code: "APPLE_TRANSACTION_INVALID",
-          }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        console.log("[validate-apple-subscription] Falling back to Mode B (check device_subscriptions)");
+        // verifiedTransaction stays undefined → falls through to Mode B
       }
+    }
 
+    if (verifiedTransaction) {
       console.log(
         `[validate-apple-subscription] Verified transaction: product=${verifiedTransaction.productId}, environment=${verifiedTransaction.environment}, txn=${verifiedTransaction.originalTransactionId}`,
       );
