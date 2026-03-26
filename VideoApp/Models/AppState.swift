@@ -247,7 +247,7 @@ enum AppError: Error, Identifiable {
         case .api(let msg): return msg
         case .noSubscription: return "Subscribe to generate videos"
         case .limitReached(let limit, let remaining):
-            return "You've used \(limit - remaining) of \(limit) generations. Upgrade for more."
+            return "You've used all \(limit) generations this period. They'll reset at the start of your next billing cycle."
         case .imageProcessing(let msg): return msg
         case .storage(let msg): return msg
         case .unknown(let msg): return msg
