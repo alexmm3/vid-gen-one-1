@@ -57,7 +57,10 @@ function getAppAppleId(): number | undefined {
 }
 
 function shouldEnableOnlineChecks(): boolean {
-  return Deno.env.get("APPLE_ENABLE_ONLINE_CERT_CHECKS") !== "false";
+  // Default to false — OCSP checks fail in Supabase edge function runtime.
+  // Cryptographic signature verification against embedded Apple Root CAs still works.
+  const envValue = Deno.env.get("APPLE_ENABLE_ONLINE_CERT_CHECKS");
+  return envValue === "true";
 }
 
 function verifierForEnvironment(environment: Environment): SignedDataVerifier | null {
