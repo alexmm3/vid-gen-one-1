@@ -32,9 +32,11 @@ struct GenerationConfirmationView: View {
                 Spacer()
                 
                 // Generate button
-                VideoButton(title: "Generate Video") {
-                    startGeneration()
-                }
+                VideoButton(
+                    title: "Generate Video",
+                    action: { startGeneration() },
+                    isEnabled: !viewModel.isGenerating
+                )
                 .padding(.horizontal, VideoSpacing.screenHorizontal)
                 .padding(.bottom, VideoSpacing.xxl)
             }
@@ -149,7 +151,12 @@ struct GenerationConfirmationView: View {
             viewModel.showPaywall = true
             return
         }
-        
+
+        // Block if another generation is already in progress
+        if !ActiveGenerationManager.shared.canStartNewGeneration() {
+            return
+        }
+
         Task {
             await viewModel.generate(photo: photo, template: template)
         }
