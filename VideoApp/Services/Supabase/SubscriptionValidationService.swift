@@ -32,6 +32,8 @@ final class SubscriptionValidationService {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(Secrets.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        request.setValue(Secrets.supabaseAnonKey, forHTTPHeaderField: "apikey")
         request.timeoutInterval = 30
         
         var body: [String: Any] = [

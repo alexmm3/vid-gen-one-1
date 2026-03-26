@@ -60,8 +60,10 @@ final class GenerationService: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(Secrets.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        request.setValue(Secrets.supabaseAnonKey, forHTTPHeaderField: "apikey")
         request.timeoutInterval = AppConstants.API.requestTimeout
-        
+
         // character_orientation: "video" = motion from video applied to portrait (30s limit)
         // character_orientation: "image" = would use image orientation (10s limit) - NOT USED
         // copy_audio: true = always copy audio from reference video
@@ -140,6 +142,8 @@ final class GenerationService: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(Secrets.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        request.setValue(Secrets.supabaseAnonKey, forHTTPHeaderField: "apikey")
         request.timeoutInterval = AppConstants.API.requestTimeout
 
         var body: [String: Any] = [
@@ -220,10 +224,12 @@ final class GenerationService: ObservableObject {
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        request.setValue("Bearer \(Secrets.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        request.setValue(Secrets.supabaseAnonKey, forHTTPHeaderField: "apikey")
         request.timeoutInterval = 30
-        
+
         let (data, response) = try await session.data(for: request)
-        
+
         guard let httpResponse = response as? HTTPURLResponse,
               (200...299).contains(httpResponse.statusCode) else {
             throw GenerationServiceError.statusCheckFailed
@@ -298,8 +304,10 @@ final class GenerationService: ObservableObject {
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        request.setValue("Bearer \(Secrets.supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        request.setValue(Secrets.supabaseAnonKey, forHTTPHeaderField: "apikey")
         request.timeoutInterval = 15
-        
+
         let (data, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse,
