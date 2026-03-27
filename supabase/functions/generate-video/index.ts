@@ -8,6 +8,7 @@ import {
   redactGenerationApiResponseForClient,
   toClientSafeMessage,
 } from "../_shared/client-safe-message.ts";
+import { isAuthorizedAdminToken } from "../_shared/admin-auth.ts";
 import type { SupabaseClientLike } from "../_shared/supabase-client.ts";
 
 type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -215,27 +216,40 @@ serve(async (req) => {
       logger.info("device.created", { metadata: { device_uuid: device.id } });
     }
 
-    const subscriptionCheck = await checkDeviceSubscription(supabase, device.id, device_id);
+    const adminToken = (body as { adminToken?: string }).adminToken ?? req.headers.get("x-admin-token");
+    const adminPassword = Deno.env.get("ADMIN_PASSWORD");
+    const isAdmin = adminPassword ? await isAuthorizedAdminToken(adminToken, adminPassword) : false;
 
-    if (!subscriptionCheck.valid) {
-      logger.warn("subscription.invalid", {
-        metadata: { error_code: subscriptionCheck.errorCode, error: subscriptionCheck.error, device_id },
-      });
-      const statusCode = subscriptionCheck.errorCode === "LIMIT_REACHED" ? 429 : 403;
-      return jsonResponse({
-        error: subscriptionCheck.error || "Subscription invalid",
-        error_code: subscriptionCheck.errorCode,
-        limit: subscriptionCheck.generationLimit,
-        period_days: subscriptionCheck.periodDays,
-        used: subscriptionCheck.generationsUsed,
-        remaining: subscriptionCheck.generationsRemaining,
-        request_id: logger.getRequestId(),
-      }, statusCode);
+    if (isAdmin) {
+      logger.info("subscription.admin_bypass", { metadata: { device_id } });
     }
 
-    const shouldEnforceLimit =
-      typeof subscriptionCheck.generationLimit === "number" &&
-      typeof subscriptionCheck.periodStart === "string";
+    let shouldEnforceLimit = false;
+    let subscriptionCheck: Awaited<ReturnType<typeof checkDeviceSubscription>> | null = null;
+
+    if (!isAdmin) {
+      subscriptionCheck = await checkDeviceSubscription(supabase, device.id, device_id);
+
+      if (!subscriptionCheck.valid) {
+        logger.warn("subscription.invalid", {
+          metadata: { error_code: subscriptionCheck.errorCode, error: subscriptionCheck.error, device_id },
+        });
+        const statusCode = subscriptionCheck.errorCode === "LIMIT_REACHED" ? 429 : 403;
+        return jsonResponse({
+          error: subscriptionCheck.error || "Subscription invalid",
+          error_code: subscriptionCheck.errorCode,
+          limit: subscriptionCheck.generationLimit,
+          period_days: subscriptionCheck.periodDays,
+          used: subscriptionCheck.generationsUsed,
+          remaining: subscriptionCheck.generationsRemaining,
+          request_id: logger.getRequestId(),
+        }, statusCode);
+      }
+
+      shouldEnforceLimit =
+        typeof subscriptionCheck.generationLimit === "number" &&
+        typeof subscriptionCheck.periodStart === "string";
+    }
 
     const { data: reservation, error: reservationError } = await supabase
       .rpc("reserve_generation_slot", {
@@ -256,8 +270,8 @@ serve(async (req) => {
         p_copy_audio: false,
         p_error_log: [],
         p_enforce_limit: shouldEnforceLimit,
-        p_generation_limit: subscriptionCheck.generationLimit ?? null,
-        p_period_start: subscriptionCheck.periodStart ?? null,
+        p_generation_limit: subscriptionCheck?.generationLimit ?? null,
+        p_period_start: subscriptionCheck?.periodStart ?? null,
       })
       .single();
 
@@ -278,11 +292,11 @@ serve(async (req) => {
         },
       });
       return jsonResponse({
-        error: `Generation limit reached (${subscriptionCheck.generationLimit} per ${subscriptionCheck.periodDays} days)`,
+        error: `Generation limit reached (${subscriptionCheck?.generationLimit} per ${subscriptionCheck?.periodDays} days)`,
         error_code: "LIMIT_REACHED",
-        limit: subscriptionCheck.generationLimit,
-        period_days: subscriptionCheck.periodDays,
-        used: reservation.generations_used ?? subscriptionCheck.generationsUsed,
+        limit: subscriptionCheck?.generationLimit,
+        period_days: subscriptionCheck?.periodDays,
+        used: reservation.generations_used ?? subscriptionCheck?.generationsUsed,
         remaining: reservation.generations_remaining ?? 0,
         request_id: logger.getRequestId(),
       }, 429);
