@@ -325,7 +325,11 @@ extension View {
 
 private struct PendingGenerationCardView: View {
     let pending: PendingGeneration
-    
+
+    @State private var pulseScale: CGFloat = 1.0
+    @State private var backgroundScale: CGFloat = 1.0
+    @State private var gradientPosition: UnitPoint = UnitPoint(x: -1, y: -1)
+
     var body: some View {
         Color.videoSurface
             .aspectRatio(9/16, contentMode: .fit)
@@ -337,18 +341,39 @@ private struct PendingGenerationCardView: View {
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fill)
+                            .scaleEffect(backgroundScale)
                             .blur(radius: 24)
                     } placeholder: {
                         Color.videoSurface
                     }
-                    
-                    Color.black.opacity(0.3)
-                    
-                    VStack(spacing: VideoSpacing.md) {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(1.3)
-                        
+
+                    Color.black.opacity(0.4)
+
+                    // Shimmer overlay
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.0),
+                            Color.white.opacity(0.12),
+                            Color.white.opacity(0.0)
+                        ],
+                        startPoint: gradientPosition,
+                        endPoint: UnitPoint(x: gradientPosition.x + 1, y: gradientPosition.y + 1)
+                    )
+                    .blendMode(.plusLighter)
+
+                    // Pulsing icon + label
+                    VStack(spacing: VideoSpacing.sm) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.1))
+                                .frame(width: 44, height: 44)
+                                .scaleEffect(pulseScale)
+
+                            Image(systemName: "wand.and.sparkles")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.white)
+                        }
+
                         Text("Generating...")
                             .font(.videoCaption)
                             .fontWeight(.semibold)
@@ -357,6 +382,17 @@ private struct PendingGenerationCardView: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: VideoSpacing.radiusMedium))
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                    pulseScale = 1.2
+                }
+                withAnimation(.easeInOut(duration: 10.0).repeatForever(autoreverses: true)) {
+                    backgroundScale = 1.12
+                }
+                withAnimation(.linear(duration: 5.0).repeatForever(autoreverses: false)) {
+                    gradientPosition = UnitPoint(x: 2, y: 2)
+                }
+            }
     }
 }
 
