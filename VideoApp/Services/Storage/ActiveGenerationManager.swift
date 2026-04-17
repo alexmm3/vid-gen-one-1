@@ -280,8 +280,26 @@ final class ActiveGenerationManager: ObservableObject {
             outputUrl: outputUrl
         )
         
+        // Track analytics — generation success
+        let duration = Int(Date().timeIntervalSince(pending.startedAt))
+        Analytics.track(.generationCompleted(
+            generationId: pending.generationId,
+            durationSeconds: duration,
+            effectName: pending.templateName
+        ))
+
+        // Update user properties
+        let totalGens = UserDefaults.standard.integer(forKey: "analytics_total_generations") + 1
+        UserDefaults.standard.set(totalGens, forKey: "analytics_total_generations")
+        Analytics.setUserProperty(String(totalGens), for: .totalGenerations)
+        if UserDefaults.standard.string(forKey: "analytics_first_generation_date") == nil {
+            let dateStr = ISO8601DateFormatter().string(from: Date())
+            UserDefaults.standard.set(dateStr, forKey: "analytics_first_generation_date")
+            Analytics.setUserProperty(dateStr, for: .firstGenerationDate)
+        }
+
         print("✅ ActiveGenerationManager: Generation completed \(pending.generationId)")
-        
+
         // Post notification (ToastManager listens to this)
         NotificationCenter.default.post(
             name: .generationCompleted,

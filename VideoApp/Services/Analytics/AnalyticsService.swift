@@ -29,4 +29,7 @@ enum AnalyticsUserPropertyKey: String {
     case appVersion = "app_version"
     case platform = "platform"
     case deviceId = "device_id"
+    case totalGenerations = "total_generations"
+    case onboardingCompleted = "onboarding_completed"
+    case firstGenerationDate = "first_generation_date"
 }

@@ -38,26 +38,25 @@ final class TemplateGalleryViewModel: ObservableObject {
     /// Load templates from Supabase
     func loadTemplates() async {
         await templateService.fetchTemplates()
-        Analytics.track(.templateGalleryViewed)
+        Analytics.track(.effectCatalogViewed)
     }
-    
+
     /// Refresh templates
     func refresh() async {
         await templateService.refresh()
     }
-    
+
     /// Handle template selection
     func selectTemplate(_ template: VideoTemplate) {
-        Analytics.track(.templateSelected(
-            templateId: template.id.uuidString,
-            templateName: template.name
+        Analytics.track(.effectDetailOpened(
+            effectId: template.id.uuidString,
+            effectName: template.name
         ))
     }
-    
+
     /// Handle custom video selection
     func selectCustomVideo(url: URL) {
         selectedCustomVideoUrl = url
-        Analytics.track(.customVideoSelected)
     }
     
     /// Clear custom video selection

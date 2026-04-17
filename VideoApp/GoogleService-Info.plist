@@ -3,28 +3,28 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>REPLACE_WITH_FIREBASE_API_KEY</string>
+	<string>AIzaSyDNBpCm-vF7pNnjtiVZufHUKfKpGXx2XHc</string>
 	<key>GCM_SENDER_ID</key>
-	<string>REPLACE_WITH_GCM_SENDER_ID</string>
+	<string>359438510758</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>REPLACE_WITH_BUNDLE_ID</string>
+	<string>com.alexm.videoeffects1</string>
 	<key>PROJECT_ID</key>
-	<string>REPLACE_WITH_FIREBASE_PROJECT_ID</string>
+	<string>video-gen-app-f360b</string>
 	<key>STORAGE_BUCKET</key>
-	<string>REPLACE_WITH_STORAGE_BUCKET</string>
+	<string>video-gen-app-f360b.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
-	<false></false>
+	<false/>
 	<key>IS_ANALYTICS_ENABLED</key>
-	<true></true>
+	<true/>
 	<key>IS_APPINVITE_ENABLED</key>
-	<true></true>
+	<true/>
 	<key>IS_GCM_ENABLED</key>
-	<true></true>
+	<true/>
 	<key>IS_SIGNIN_ENABLED</key>
-	<true></true>
+	<true/>
 	<key>GOOGLE_APP_ID</key>
-	<string>REPLACE_WITH_GOOGLE_APP_ID</string>
+	<string>1:359438510758:ios:0c731b66820a072f64e267</string>
 </dict>
 </plist>

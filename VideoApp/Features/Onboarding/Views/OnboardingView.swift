@@ -75,6 +75,7 @@ struct OnboardingView: View {
             appState.showOnboardingPaywall = true
             appState.hasCompletedOnboarding = true
             Analytics.track(.onboardingCompleted)
+            Analytics.setUserProperty("true", for: .onboardingCompleted)
         }
     }
 }

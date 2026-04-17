@@ -150,7 +150,12 @@ final class PaywallViewModel: ObservableObject {
     func selectPlan(_ plan: SubscriptionPlan) {
         HapticManager.shared.selection()
         selectedPlan = plan
+        let analyticsPlan: AnalyticsEvent.SubscriptionPlan = plan == .weekly ? .weekly : .monthly
+        Analytics.track(.paywallPlanSelected(plan: analyticsPlan, source: paywallSource ?? .profile))
     }
+
+    /// Stored paywall source for plan selection tracking
+    var paywallSource: AnalyticsEvent.PaywallSource?
 }
 
 // MARK: - Delegate Wrapper

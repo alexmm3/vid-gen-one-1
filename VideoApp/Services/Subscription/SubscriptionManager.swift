@@ -157,16 +157,19 @@ final class SubscriptionManager: ObservableObject {
                     
                     // Track analytics
                     let plan: AnalyticsEvent.SubscriptionPlan = productId.contains("weekly") ? .weekly : .monthly
-                    Analytics.track(.purchaseCompleted(plan: plan, transactionId: String(transactionId)))
+                    Analytics.track(.purchaseCompleted(plan: plan, transactionId: String(transactionId), productId: productId))
                     
                     print("✅ SubscriptionManager: Purchase successful - \(productId)")
                     
                 case .unverified(_, let error):
                     delegate?.errorOccurred(error: error)
-                    Analytics.track(.purchaseFailed(plan: .weekly, error: error.localizedDescription))
+                    let failPlan: AnalyticsEvent.SubscriptionPlan = product.id.contains("weekly") ? .weekly : .monthly
+                    Analytics.track(.purchaseFailed(plan: failPlan, error: error.localizedDescription))
                 }
-                
+
             case .userCancelled:
+                let cancelPlan: AnalyticsEvent.SubscriptionPlan = product.id.contains("weekly") ? .weekly : .monthly
+                Analytics.track(.purchaseCancelled(plan: cancelPlan))
                 delegate?.errorOccurred(error: IAPError.cancelledByUser)
                 
             case .pending:
@@ -177,7 +180,8 @@ final class SubscriptionManager: ObservableObject {
             }
         } catch {
             delegate?.errorOccurred(error: error)
-            Analytics.track(.purchaseFailed(plan: .weekly, error: error.localizedDescription))
+            let catchPlan: AnalyticsEvent.SubscriptionPlan = product.id.contains("weekly") ? .weekly : .monthly
+            Analytics.track(.purchaseFailed(plan: catchPlan, error: error.localizedDescription))
         }
     }
     
@@ -331,8 +335,11 @@ final class SubscriptionManager: ObservableObject {
                     generationLimit: result.generationLimit,
                     expiresAt: result.expiresAt
                 )
+                Analytics.track(.subscriptionValidated(isValid: true, plan: result.productId))
             } else {
                 // Backend says subscription expired — clear local state
+                Analytics.track(.subscriptionExpired)
+                Analytics.track(.subscriptionValidated(isValid: false, plan: nil))
                 currentProductId = nil
                 lastTransactionId = nil
                 AppState.shared.setPremiumStatus(false)

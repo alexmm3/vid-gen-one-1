@@ -80,6 +80,16 @@ struct CreateView: View {
             }
             HapticManager.shared.selection()
             prefetchNearbyAssets()
+            // Track effect scroll
+            if let id = centeredEffectID,
+               let effect = viewModel.allEffects.first(where: { $0.id == id }),
+               let position = viewModel.allEffects.firstIndex(where: { $0.id == id }) {
+                Analytics.track(.effectScrolled(
+                    effectId: effect.id.uuidString,
+                    effectName: effect.name,
+                    position: position
+                ))
+            }
         }
     }
 
@@ -116,6 +126,10 @@ struct CreateView: View {
                                         onSelect: {
                                             selectedEffect = effect
                                             showEffectGenerationView = true
+                                            Analytics.track(.effectDetailOpened(
+                                                effectId: effect.id.uuidString,
+                                                effectName: effect.name
+                                            ))
                                         }
                                     )
                                     .id(effect.id)

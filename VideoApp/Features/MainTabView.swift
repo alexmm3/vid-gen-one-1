@@ -44,6 +44,15 @@ struct MainTabView: View {
             .tint(.white)
             .preferredColorScheme(.dark)
             .environmentObject(appState)
+            .onChange(of: appState.currentTab) { _, newTab in
+                let tabName: String
+                switch newTab {
+                case .create: tabName = "create"
+                case .myVideos: tabName = "my_videos"
+                case .profile: tabName = "profile"
+                }
+                Analytics.track(.tabSwitched(tab: tabName))
+            }
             
             // Toast overlay - shown on top of everything
             ToastView()

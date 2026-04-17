@@ -97,6 +97,7 @@ struct EffectGenerationView: View {
                 Button {
                     HapticManager.shared.selection()
                     showPhotoTips = true
+                    Analytics.track(.photoTipsShown(effectName: effect.name))
                 } label: {
                     Image(systemName: "info.circle")
                         .font(.system(size: 18))
@@ -405,6 +406,7 @@ struct EffectGenerationView: View {
         }
         if !ActiveGenerationManager.shared.canStartNewGeneration() {
             showGenerationInProgressAlert = true
+            Analytics.track(.generationBlockedByActiveJob)
             return
         }
         guard let primary = primaryPhoto else { return }

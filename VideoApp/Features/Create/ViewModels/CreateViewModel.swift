@@ -50,7 +50,7 @@ final class CreateViewModel: ObservableObject {
     /// Load effect catalog (categories + effects)
     func loadAll() async {
         await effectService.fetchAll()
-        Analytics.track(.templateGalleryViewed)
+        Analytics.track(.effectCatalogViewed)
     }
 
     /// Force refresh effect catalog

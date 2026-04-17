@@ -48,6 +48,7 @@ struct ProfileView: View {
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.large)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .onAppear { Analytics.track(.profileViewed) }
         .fullScreenCover(isPresented: $showPaywall) {
             PaywallView(source: .profile) {
                 appState.setPremiumStatus(true)
@@ -187,12 +188,14 @@ struct ProfileView: View {
             linkDivider
             
             linkRow(title: "Privacy Policy", icon: "lock.shield") {
+                Analytics.track(.settingsTapped(setting: "privacy_policy"))
                 openURL(ExternalURLs.privacyPolicy)
             }
-            
+
             linkDivider
-            
+
             linkRow(title: "Terms of Use", icon: "doc.plaintext") {
+                Analytics.track(.settingsTapped(setting: "terms_of_use"))
                 openURL(ExternalURLs.termsOfUse)
             }
         }

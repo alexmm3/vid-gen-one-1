@@ -69,6 +69,7 @@ struct PaywallView: View {
             }
         }
         .task {
+            viewModel.paywallSource = source
             await viewModel.loadProducts()
             Analytics.track(.paywallShown(source: source))
         }

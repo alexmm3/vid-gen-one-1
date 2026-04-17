@@ -220,9 +220,9 @@ struct HistoryListView: View {
     private func save(generation: LocalGeneration) {
         guard generation.effectiveVideoUrl != nil, isSavingGenerationID == nil else { return }
         isSavingGenerationID = generation.id
-        Analytics.track(.videoSaved)
+        Analytics.track(.videoSaved(effectName: generation.displayName))
         HapticManager.shared.lightImpact()
-        
+
         Task {
             do {
                 try await HistoryItemActionHandler.saveToPhotos(generation: generation)
@@ -235,6 +235,7 @@ struct HistoryListView: View {
                 await MainActor.run {
                     isSavingGenerationID = nil
                     showSaveError = true
+                    Analytics.track(.videoSaveFailed(error: error.localizedDescription))
                     HapticManager.shared.error()
                 }
             }
@@ -244,7 +245,7 @@ struct HistoryListView: View {
     private func share(generation: LocalGeneration) {
         guard generation.effectiveVideoUrl != nil, isSharingGenerationID == nil else { return }
         isSharingGenerationID = generation.id
-        Analytics.track(.videoShared)
+        Analytics.track(.videoShared(effectName: generation.displayName))
         HapticManager.shared.lightImpact()
         
         Task {

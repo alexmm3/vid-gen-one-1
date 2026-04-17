@@ -17,13 +17,14 @@ struct AIDataConsentView: View {
     var body: some View {
         ZStack {
             Color.videoBackground.ignoresSafeArea()
-            
+
             VStack(spacing: 0) {
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: VideoSpacing.xl) {
                         headerSection
                             .padding(.top, VideoSpacing.xxl)
-                        
+                            .onAppear { Analytics.track(.aiConsentShown) }
+
                         disclosureList
                         
                         privacyPolicyLink
@@ -171,6 +172,7 @@ struct AIDataConsentView: View {
                 title: "I Agree & Continue",
                 icon: "checkmark.shield",
                 action: {
+                    Analytics.track(.aiConsentAccepted)
                     onAccept()
                     dismiss()
                 }

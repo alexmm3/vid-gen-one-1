@@ -147,7 +147,8 @@ final class GenerationViewModel: ObservableObject {
         
         // Track start
         Analytics.track(.generationStarted(
-            templateId: template.id.uuidString,
+            effectId: template.id.uuidString,
+            effectName: template.name,
             isCustom: isCustom
         ))
         
@@ -223,7 +224,7 @@ final class GenerationViewModel: ObservableObject {
         generationSubmitted = false
         error = nil
 
-        Analytics.track(.generationStarted(templateId: effect.id.uuidString, isCustom: false))
+        Analytics.track(.generationStarted(effectId: effect.id.uuidString, effectName: effect.name, isCustom: false))
 
         // Register intent immediately
         activeGenerationManager.startUploading(
@@ -289,7 +290,7 @@ final class GenerationViewModel: ObservableObject {
         generationSubmitted = false
         error = nil
         
-        Analytics.track(.generationStarted(templateId: nil, isCustom: true))
+        Analytics.track(.generationStarted(effectId: nil, effectName: templateName, isCustom: true))
         
         // Register intent immediately
         activeGenerationManager.startUploading(
@@ -387,6 +388,9 @@ final class GenerationViewModel: ObservableObject {
     func dismissGeneratingView() {
         // Keep generationSubmitted true so we know there's an active generation
         // But allow the UI to dismiss
+        if let pending = activeGenerationManager.pendingGeneration {
+            Analytics.track(.generationBackgrounded(generationId: pending.generationId))
+        }
         isGenerating = false
     }
     
@@ -401,7 +405,12 @@ final class GenerationViewModel: ObservableObject {
         HapticManager.shared.error()
         
         // Track error
-        Analytics.track(.generationFailed(error: error.localizedDescription))
+        Analytics.track(.generationFailed(
+            effectId: nil,
+            effectName: nil,
+            error: error.localizedDescription,
+            errorCategory: Self.categorizeError(error)
+        ))
         
         // Clear from active manager if it failed during upload
         activeGenerationManager.clearPendingGeneration()
@@ -432,6 +441,16 @@ final class GenerationViewModel: ObservableObject {
         }
     }
     
+    private static func categorizeError(_ error: GenerationServiceError) -> AnalyticsEvent.ErrorCategory {
+        switch error {
+        case .networkError: return .network
+        case .timeout: return .timeout
+        case .noSubscription, .limitReached: return .subscription
+        case .serverError, .generationFailed, .invalidResponse, .statusCheckFailed: return .server
+        case .invalidRequest: return .unknown
+        }
+    }
+
     private func saveToHistory(template: VideoTemplate, inputUrl: String, outputUrl: String?) {
         historyService.saveGeneration(
             templateName: template.name,

@@ -469,7 +469,7 @@ struct HistoryDetailView: View {
     private func saveToPhotos() {
         guard generation.effectiveVideoUrl != nil, !isSaving else { return }
         isSaving = true
-        Analytics.track(.videoSaved)
+        Analytics.track(.videoSaved(effectName: generation.displayName))
         HapticManager.shared.lightImpact()
         Task {
             do {
@@ -480,7 +480,12 @@ struct HistoryDetailView: View {
                     HapticManager.shared.success()
                 }
             } catch {
-                await MainActor.run { isSaving = false; showSaveError = true; HapticManager.shared.error() }
+                await MainActor.run {
+                    isSaving = false
+                    showSaveError = true
+                    Analytics.track(.videoSaveFailed(error: error.localizedDescription))
+                    HapticManager.shared.error()
+                }
             }
         }
     }
@@ -488,7 +493,7 @@ struct HistoryDetailView: View {
     private func shareVideo() {
         guard generation.effectiveVideoUrl != nil, !isSharing else { return }
         isSharing = true
-        Analytics.track(.videoShared)
+        Analytics.track(.videoShared(effectName: generation.displayName))
         HapticManager.shared.lightImpact()
         Task {
             do {

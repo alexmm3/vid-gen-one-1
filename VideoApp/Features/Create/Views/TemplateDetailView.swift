@@ -34,9 +34,9 @@ struct TemplateDetailView: View {
                 VideoButton(title: "Use This Video") {
                     HapticManager.shared.mediumImpact()
                     navigateToPhotoUpload = true
-                    Analytics.track(.templateSelected(
-                        templateId: template.id.uuidString,
-                        templateName: template.name
+                    Analytics.track(.effectDetailOpened(
+                        effectId: template.id.uuidString,
+                        effectName: template.name
                     ))
                 }
                 .padding(.horizontal, VideoSpacing.screenHorizontal)

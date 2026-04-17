@@ -77,7 +77,7 @@ struct ResultView: View {
             Text("Unable to save video to Photos. Please check your permissions.")
         }
         .onAppear {
-            Analytics.track(.resultViewed)
+            Analytics.track(.resultViewed(effectName: templateName))
         }
     }
     
@@ -233,22 +233,22 @@ struct ResultView: View {
         guard !isSaving else { return }
         
         isSaving = true
-        Analytics.track(.videoSaved)
+        Analytics.track(.videoSaved(effectName: templateName))
         HapticManager.shared.lightImpact()
-        
+
         Task {
             do {
                 // Download video
                 let data = try await StorageService.shared.downloadVideo(from: videoUrl)
-                
+
                 // Save to Photos
                 try await saveVideoToPhotoLibrary(data: data)
-                
+
                 await MainActor.run {
                     isSaving = false
                     showSaveSuccess = true
                     HapticManager.shared.success()
-                    
+
                     // Hide toast after delay
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                         showSaveSuccess = false
@@ -258,6 +258,7 @@ struct ResultView: View {
                 await MainActor.run {
                     isSaving = false
                     showSaveError = true
+                    Analytics.track(.videoSaveFailed(error: error.localizedDescription))
                     HapticManager.shared.error()
                 }
             }
@@ -296,7 +297,7 @@ struct ResultView: View {
         guard !isSharing else { return }
         
         isSharing = true
-        Analytics.track(.videoShared)
+        Analytics.track(.videoShared(effectName: templateName))
         HapticManager.shared.lightImpact()
         
         Task {
